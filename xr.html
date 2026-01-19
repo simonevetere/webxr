@@ -4,20 +4,20 @@
     <meta charset='utf-8'>
     <meta name='viewport' content='width=device-width, initial-scale=1, user-scalable=no'>
     <link rel='stylesheet' href='css/common.css'>
-    <title>AR QR-Tracking Sunflower</title>
+    <title>AR QR-Tracking Sunflower - Posizionato Sopra</title>
   </head>
   <body>
     <header>
       <details open>
-        <summary>QR Tracking</summary>
-        <p>Inquadra il QR code per far apparire il girasole rimpicciolito.</p>
+        <summary>QR Tracking Verticale</summary>
+        <p>Il girasole appare ora sopra il bordo superiore del QR code verticale.</p>
       </details>
     </header>
     <script type="module">
       import {WebXRButton} from './js/util/webxr-button.js';
       import {Scene} from './js/render/scenes/scene.js';
       import {Renderer, createWebGLContext} from './js/render/core/renderer.js';
-      import {Node} from './js/render/core/node.js'; // AGGIUNTO: Necessario per la gerarchia
+      import {Node} from './js/render/core/node.js'; 
       import {Gltf2Node} from './js/render/nodes/gltf2.js';
       import {QueryArgs} from './js/util/query-args.js';
 
@@ -28,16 +28,29 @@
       let scene = new Scene();
       scene.enableStats(false);
 
-      // 1. Creiamo un "contenitore" che seguirà il QR code
+      // 1. Creiamo il contenitore che seguirà il QR code
       let trackingNode = new Node();
       trackingNode.visible = false;
       scene.addNode(trackingNode);
 
-      // 2. Carichiamo il girasole come FIGLIO del contenitore
+      // 2. Carichiamo il girasole
       let sunflower = new Gltf2Node({url: 'media/gltf/sunflower/sunflower.gltf'});
       
-      // QUI REGOLI LA GRANDEZZA: 0.1 è il 10% della dimensione originale
+      // --- MODIFICHE QUI ---
+      
+      // SCALA: Lo rimpiccioliamo
       sunflower.scale = [0.1, 0.1, 0.1]; 
+
+      // POSIZIONE (TRANSLATION):
+      // Lo spostiamo di 2.5 cm (0.025m) verso l'alto (asse Y) rispetto al centro del QR.
+      // Dato che il QR è alto 5cm, questo lo posiziona esattamente sul bordo superiore.
+      sunflower.translation = [0, 0.025, 0];
+
+      // ROTAZIONE:
+      // Lo ruotiamo di -90 gradi sull'asse X per farlo stare "in piedi" verticalmente.
+      sunflower.rotation = [-Math.PI / 2, 0, 0];
+
+      // ---------------------
       
       trackingNode.addNode(sunflower);
 
@@ -64,7 +77,7 @@
           requiredFeatures: ['image-tracking'],
           trackedImages: [{
             image: bitmap,
-            widthInMeters: 0.05 // Il QR fisico è largo 5cm
+            widthInMeters: 0.05 // Larghezza reale del QR (5cm)
           }]
         }).then((session) => {
           xrButton.setSession(session);
@@ -98,7 +111,7 @@
           if (result.trackingState == 'tracked') {
             const imagePose = frame.getPose(result.imageSpace, xrImmersiveRefSpace);
             if (imagePose) {
-              // MUOVIAMO IL CONTENITORE, non il girasole direttamente
+              // Muoviamo il CONTENITORE
               trackingNode.visible = true;
               trackingNode.matrix = imagePose.transform.matrix;
             }
