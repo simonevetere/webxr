@@ -49,7 +49,15 @@
       // --- FASE 1: SCANNER QR STANDARD (NO FLAGS) ---
       async function startScanner() {
         const videoDevices = await codeReader.getVideoInputDevices();
-        const selectedDeviceId = videoDevices[0].deviceId;
+        
+        // Cerchiamo una camera che contenga la parola 'back' o 'posteriore'
+        // Se non la troviamo, prendiamo l'ultima della lista (spesso è quella principale)
+        const selectedDevice = videoDevices.find(device => 
+          device.label.toLowerCase().includes('back') || 
+          device.label.toLowerCase().includes('posteriore')
+        ) || videoDevices[videoDevices.length - 1];
+      
+        const selectedDeviceId = selectedDevice.deviceId;
 
         codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
           if (result) {
