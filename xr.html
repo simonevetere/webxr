@@ -77,16 +77,25 @@
       }
 
       // --- FASE 2: PASSAGGIO A WEBXR ---
-      btnStartAR.onclick = () => {
-        // Interrompiamo lo scanner video
-        codeReader.reset();
-        video.srcObject.getTracks().forEach(track => track.stop());
-        document.getElementById('video-container').style.display = 'none';
-        
-        // Avviamo la sessione WebXR Hit-Test (Standard)
-        navigator.xr.requestSession('immersive-ar', {
-          requiredFeatures: ['hit-test']
-        }).then(onSessionStarted);
+      btnStartAR.onclick = async () => {
+        try {
+          // 1. Ferma tutto lo scanner
+          codeReader.reset();
+          if (video.srcObject) {
+            video.srcObject.getTracks().forEach(track => track.stop());
+          }
+          document.getElementById('video-container').style.visibility = 'hidden';
+      
+          // 2. Avvia WebXR
+          const session = await navigator.xr.requestSession('immersive-ar', {
+            requiredFeatures: ['hit-test', 'local']
+          });
+          
+          onSessionStarted(session);
+        } catch (e) {
+          alert("Errore nell'avvio AR: " + e.message);
+          console.error(e);
+        }
       };
 
       function onSessionStarted(session) {
