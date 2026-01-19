@@ -3,14 +3,22 @@
   <head>
     <meta charset='utf-8'>
     <meta name='viewport' content='width=device-width, initial-scale=1, user-scalable=no'>
+    <meta name='mobile-web-app-capable' content='yes'>
+    <meta name='apple-mobile-web-app-capable' content='yes'>
+    <link rel='icon' type='image/png' sizes='32x32' href='favicon-32x32.png'>
+    <link rel='icon' type='image/png' sizes='96x96' href='favicon-96x96.png'>
     <link rel='stylesheet' href='css/common.css'>
-    <title>Oggetto Singolo AR</title>
+
+    <title>Immersive AR - Oggetto Singolo</title>
   </head>
   <body>
     <header>
       <details open>
-        <summary>Immersive AR Session</summary>
-        <p>Esempio con un singolo oggetto centrato.</p>
+        <summary>Sessione AR Pulita</summary>
+        <p>
+          In questa versione l'oggetto è centrato e i dati FPS sono nascosti.
+          <a class="back" href="./">Indietro</a>
+        </p>
       </details>
     </header>
     <script type="module">
@@ -18,6 +26,7 @@
       import {Scene} from './js/render/scenes/scene.js';
       import {Renderer, createWebGLContext} from './js/render/core/renderer.js';
       import {Gltf2Node} from './js/render/nodes/gltf2.js';
+      import {InlineViewerHelper} from './js/util/inline-viewer-helper.js';
       import {QueryArgs} from './js/util/query-args.js';
       import WebXRPolyfill from './js/third-party/webxr-polyfill/build/webxr-polyfill.module.js';
 
@@ -25,34 +34,40 @@
         let polyfill = new WebXRPolyfill();
       }
 
+      // Variabili globali
       let xrButton = null;
       let xrImmersiveRefSpace = null;
       let inlineViewerHelper = null;
       let gl = null;
       let renderer = null;
+
+      // 1. Inizializzazione Scena
       let scene = new Scene();
+      
+      // --- RIGA PER TOGLIERE IL DISPLAY FPS ---
+      scene.enableStats(false); 
 
-      // --- MODIFICA QUI: CREAZIONE OGGETTO SINGOLO ---
-      // Carichiamo un solo modello (es. un cubo o un altro file .gltf)
-      let oggettoSingolo = new Gltf2Node({url: 'media/gltf/box/box.gltf'}); 
+      // 2. Caricamento Oggetto Singolo
+      // Nota: se 'sunflower' non carica, usa 'media/gltf/space/space.gltf'
+      let oggettoSingolo = new Gltf2Node({url: 'media/gltf/sunflower/sunflower.gltf'}); 
       
-      // Posizionamento: [X, Y, Z] in metri
-      // X: 0 (Centro), Y: 0 (Altezza pavimento/occhi), Z: -1 (1 metro avanti)
-      oggettoSingolo.translation = [0, 0, -1]; 
+      // Posizionamento: [X, Y, Z] -> 0 (centro), -0.5 (altezza petto), -1 (1 metro avanti)
+      oggettoSingolo.translation = [0, -0.5, -1]; 
       
-      // Scala: riduciamo la dimensione se l'oggetto è troppo grande
+      // Scala: 0.5 è il 50% della dimensione originale
       oggettoSingolo.scale = [0.5, 0.5, 0.5]; 
-
+      
       scene.addNode(oggettoSingolo);
-      // ----------------------------------------------
+
+      // --- SKYBOX RIMOSSA PER AR PULITA ---
 
       function initXR() {
         xrButton = new WebXRButton({
           onRequestSession: onRequestSession,
           onEndSession: onEndSession,
-          textEnterXRTitle: "START AR",
-          textXRNotFoundTitle: "AR NOT FOUND",
-          textExitXRTitle: "EXIT AR",
+          textEnterXRTitle: "AVVIA AR",
+          textXRNotFoundTitle: "AR NON DISPONIBILE",
+          textExitXRTitle: "ESCI DA AR",
         });
         document.querySelector('header').appendChild(xrButton.domElement);
 
@@ -77,12 +92,14 @@
         if (gl) return;
         gl = createWebGLContext({ xrCompatible: true });
         document.body.appendChild(gl.canvas);
+
         function onResize() {
           gl.canvas.width = gl.canvas.clientWidth * window.devicePixelRatio;
           gl.canvas.height = gl.canvas.clientHeight * window.devicePixelRatio;
         }
         window.addEventListener('resize', onResize);
         onResize();
+
         renderer = new Renderer(gl);
         scene.setRenderer(renderer);
       }
@@ -90,6 +107,7 @@
       function onSessionStarted(session) {
         session.addEventListener('end', onSessionEnded);
         initGL();
+
         session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
 
         let refSpaceType = session.isImmersive ? 'local' : 'viewer';
@@ -97,14 +115,21 @@
           if (session.isImmersive) {
             xrImmersiveRefSpace = refSpace;
           } else {
-            inlineViewerHelper = new (import('./js/util/inline-viewer-helper.js').InlineViewerHelper)(gl.canvas, refSpace);
+            inlineViewerHelper = new InlineViewerHelper(gl.canvas, refSpace);
           }
           session.requestAnimationFrame(onXRFrame);
         });
       }
 
-      function onEndSession(session) { session.end(); }
-      function onSessionEnded(event) { if (event.session.isImmersive) { xrButton.setSession(null); } }
+      function onEndSession(session) {
+        session.end();
+      }
+
+      function onSessionEnded(event) {
+        if (event.session.isImmersive) {
+          xrButton.setSession(null);
+        }
+      }
 
       function onXRFrame(t, frame) {
         let session = frame.session;
