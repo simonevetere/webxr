@@ -1,0 +1,168 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1, user-scalable=no'>
+    <meta name='mobile-web-app-capable' content='yes'>
+    <meta name='apple-mobile-web-app-capable' content='yes'>
+    <link rel='icon' type='image/png' sizes='32x32' href='favicon-32x32.png'>
+    <link rel='icon' type='image/png' sizes='96x96' href='favicon-96x96.png'>
+    <link rel='stylesheet' href='css/common.css'>
+
+    <title>WebXR QR Code Tracking</title>
+  </head>
+  <body>
+    <img id="qr-code-img" src="media/textures/qr-code.png" style="display:none">
+
+    <header>
+      <details open>
+        <summary>WebXR QR Anchor</summary>
+        <p>
+          Inquadra il QR Code per visualizzare l'oggetto ancorato.
+          WebXR garantisce massima stabilità rispetto ad AR.js.
+          <a class="back" href="./">Back</a>
+        </p>
+      </details>
+    </header>
+
+    <script type="module">
+      import {WebXRButton} from './js/util/webxr-button.js';
+      import {Scene} from './js/render/scenes/scene.js';
+      import {Renderer, createWebGLContext} from './js/render/core/renderer.js';
+      import {SkyboxNode} from './js/render/nodes/skybox.js';
+      import {InlineViewerHelper} from './js/util/inline-viewer-helper.js';
+      import {Gltf2Node} from './js/render/nodes/gltf2.js';
+      import {QueryArgs} from './js/util/query-args.js';
+
+      let xrButton = null;
+      let xrImmersiveRefSpace = null;
+      let inlineViewerHelper = null;
+
+      let gl = null;
+      let renderer = null;
+      let scene = new Scene();
+      
+      // Carichiamo il modello (es. sistema solare)
+      let solarSystem = new Gltf2Node({url: 'media/gltf/space/space.gltf'});
+      solarSystem.scale = [0.1, 0.1, 0.1];
+      solarSystem.visible = false; // Nascosto finché non vede il QR
+      scene.addNode(solarSystem);
+
+      let skybox = new SkyboxNode({url: 'media/textures/milky-way-4k.png'});
+      scene.addNode(skybox);
+
+      function initXR() {
+        xrButton = new WebXRButton({
+          onRequestSession: onRequestSession,
+          onEndSession: onEndSession,
+          textEnterXRTitle: "START AR (QR)",
+          textXRNotFoundTitle: "AR NOT FOUND",
+          textExitXRTitle: "EXIT AR",
+        });
+        document.querySelector('header').appendChild(xrButton.domElement);
+
+        if (navigator.xr) {
+          navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+            xrButton.enabled = supported;
+          });
+          navigator.xr.requestSession('inline').then(onSessionStarted);
+        }
+      }
+
+      async function onRequestSession() {
+        // Prepara l'immagine per il tracking
+        const img = document.getElementById('qr-code-img');
+        const bitmap = await createImageBitmap(img);
+
+        // Richiede sessione AR con Image Tracking
+        return navigator.xr.requestSession('immersive-ar', {
+          requiredFeatures: ['image-tracking'],
+          trackedImages: [{
+            image: bitmap,
+            widthInMeters: 0.15 // Regola in base alla grandezza reale del QR stampato
+          }]
+        }).then((session) => {
+          xrButton.setSession(session);
+          session.isImmersive = true;
+          onSessionStarted(session);
+        });
+      }
+
+      function initGL() {
+        if (gl) return;
+        gl = createWebGLContext({ xrCompatible: true });
+        document.body.appendChild(gl.canvas);
+        window.addEventListener('resize', () => {
+          gl.canvas.width = gl.canvas.clientWidth * window.devicePixelRatio;
+          gl.canvas.height = gl.canvas.clientHeight * window.devicePixelRatio;
+        });
+        renderer = new Renderer(gl);
+        scene.setRenderer(renderer);
+      }
+
+      function onSessionStarted(session) {
+        session.addEventListener('end', onSessionEnded);
+        if (session.isImmersive) {
+          skybox.visible = false;
+        }
+        initGL();
+        session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
+
+        let refSpaceType = session.isImmersive ? 'local' : 'viewer';
+        session.requestReferenceSpace(refSpaceType).then((refSpace) => {
+          if (session.isImmersive) {
+            xrImmersiveRefSpace = refSpace;
+          } else {
+            inlineViewerHelper = new InlineViewerHelper(gl.canvas, refSpace);
+          }
+          session.requestAnimationFrame(onXRFrame);
+        });
+      }
+
+      function onEndSession(session) {
+        session.end();
+      }
+
+      function onSessionEnded(event) {
+        if (event.session.isImmersive) {
+          xrButton.setSession(null);
+          skybox.visible = true;
+          solarSystem.visible = false;
+        }
+      }
+
+      // Ciclo di Rendering Principale
+      function onXRFrame(t, frame) {
+        let session = frame.session;
+        let refSpace = session.isImmersive ? xrImmersiveRefSpace : inlineViewerHelper.referenceSpace;
+        
+        // --- GESTIONE TRACKING QR CODE ---
+        if (session.isImmersive && frame.getImageTrackingResults) {
+          const results = frame.getImageTrackingResults();
+          let found = false;
+          for (const result of results) {
+            if (result.trackingState === 'tracked') {
+              const pose = frame.getPose(result.imageSpace, refSpace);
+              if (pose) {
+                solarSystem.visible = true;
+                // Sovrascrive la matrice del modello con quella del QR Code
+                solarSystem.matrix = pose.transform.matrix;
+                found = true;
+              }
+            }
+          }
+          // Se vuoi che sparisca quando perdi il QR, scommenta:
+          // if (!found) solarSystem.visible = false;
+        }
+
+        scene.startFrame();
+        session.requestAnimationFrame(onXRFrame);
+        let pose = frame.getViewerPose(refSpace);
+        scene.drawXRFrame(frame, pose);
+        scene.endFrame();
+      }
+
+      initXR();
+    </script>
+  </body>
+</html>
