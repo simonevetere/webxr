@@ -9,14 +9,12 @@
     <link rel='icon' type='image/png' sizes='96x96' href='favicon-96x96.png'>
     <link rel='stylesheet' href='css/common.css'>
 
-    <title>WebXR QR Code Tracking</title>
+    <title>Immersive AR Session</title>
   </head>
   <body>
-    <img id="qr-code-img" src="media/textures/qr-code.png" style="display:none">
-
     <header>
       <details open>
-        <summary>WebXR QR Anchor</summary>
+        <summary>Immersive AR Session</summary>
         <p>
           This sample demonstrates how to use an 'immersive-ar' XRSession to
           present a simple WebGL scene to a transparent or passthrough XR
@@ -27,7 +25,6 @@
         </p>
       </details>
     </header>
-
     <script type="module">
       import {WebXRButton} from './js/util/webxr-button.js';
       import {Scene} from './js/render/scenes/scene.js';
@@ -49,16 +46,16 @@
       let xrImmersiveRefSpace = null;
       let inlineViewerHelper = null;
 
+      // WebGL scene globals.
       let gl = null;
       let renderer = null;
       let scene = new Scene();
-      
-      // Carichiamo il modello (es. sistema solare)
       let solarSystem = new Gltf2Node({url: 'media/gltf/space/space.gltf'});
+      // The solar system is big (citation needed). Scale it down so that users
+      // can move around the planets more easily.
       solarSystem.scale = [0.1, 0.1, 0.1];
-      solarSystem.visible = false; // Nascosto finché non vede il QR
       scene.addNode(solarSystem);
-
+      // Still adding a skybox, but only for the benefit of the inline view.
       let skybox = new SkyboxNode({url: 'media/textures/milky-way-4k.png'});
       scene.addNode(skybox);
 
@@ -68,61 +65,80 @@
           onEndSession: onEndSession,
           textEnterXRTitle: "START AR",
           textXRNotFoundTitle: "AR NOT FOUND",
-          textExitXRTitle: "EXIT AR",
+          textExitXRTitle: "EXIT  AR",
         });
         document.querySelector('header').appendChild(xrButton.domElement);
 
         if (navigator.xr) {
+          // Checks to ensure that 'immersive-ar' mode is available, and only
+          // enables the button if so.
           navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
             xrButton.enabled = supported;
           });
+
           navigator.xr.requestSession('inline').then(onSessionStarted);
         }
       }
 
-      async function onRequestSession() {
-        // Prepara l'immagine per il tracking
-        const img = document.getElementById('qr-code-img');
-        const bitmap = await createImageBitmap(img);
-
-        // Richiede sessione AR con Image Tracking
-        return navigator.xr.requestSession('immersive-ar', {
-          requiredFeatures: ['image-tracking'],
-          trackedImages: [{
-            image: bitmap,
-            widthInMeters: 0.15 // Regola in base alla grandezza reale del QR stampato
-          }]
-        }).then((session) => {
-          xrButton.setSession(session);
-          session.isImmersive = true;
-          onSessionStarted(session);
-        });
+      function onRequestSession() {
+        // Requests an 'immersive-ar' session, which ensures that the users
+        // environment will be visible either via video passthrough or a
+        // transparent display. This may be presented either in a headset or
+        // fullscreen on a mobile device.
+        return navigator.xr.requestSession('immersive-ar')
+            .then((session) => {
+              xrButton.setSession(session);
+              session.isImmersive = true;
+              onSessionStarted(session);
+            });
       }
 
       function initGL() {
-        if (gl) return;
-        gl = createWebGLContext({ xrCompatible: true });
+        if (gl)
+          return;
+
+        gl = createWebGLContext({
+          xrCompatible: true
+        });
         document.body.appendChild(gl.canvas);
-        window.addEventListener('resize', () => {
+
+        function onResize() {
           gl.canvas.width = gl.canvas.clientWidth * window.devicePixelRatio;
           gl.canvas.height = gl.canvas.clientHeight * window.devicePixelRatio;
-        });
+        }
+        window.addEventListener('resize', onResize);
+        onResize();
+
         renderer = new Renderer(gl);
+
         scene.setRenderer(renderer);
       }
 
       function onSessionStarted(session) {
         session.addEventListener('end', onSessionEnded);
+
         if (session.isImmersive) {
+          // When in 'immersive-ar' mode don't draw an opaque background because
+          // we want the real world to show through.
           skybox.visible = false;
         }
+
         initGL();
+
         session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
 
         let refSpaceType = session.isImmersive ? 'local' : 'viewer';
         session.requestReferenceSpace(refSpaceType).then((refSpace) => {
           if (session.isImmersive) {
             xrImmersiveRefSpace = refSpace;
+
+            xrImmersiveRefSpace.addEventListener('reset', (evt) => {
+              if (evt.transform) {
+                // AR experiences typically should stay grounded to the real world.
+                // If there's a known origin shift, compensate for it here.
+                xrImmersiveRefSpace = xrImmersiveRefSpace.getOffsetReferenceSpace(evt.transform);
+              }
+            });
           } else {
             inlineViewerHelper = new InlineViewerHelper(gl.canvas, refSpace);
           }
@@ -137,42 +153,29 @@
       function onSessionEnded(event) {
         if (event.session.isImmersive) {
           xrButton.setSession(null);
+          // Turn the background back on when we go back to the inlive view.
           skybox.visible = true;
-          solarSystem.visible = false;
         }
       }
 
-      // Ciclo di Rendering Principale
+      // Called every time a XRSession requests that a new frame be drawn.
       function onXRFrame(t, frame) {
         let session = frame.session;
-        let refSpace = session.isImmersive ? xrImmersiveRefSpace : inlineViewerHelper.referenceSpace;
-        
-        // --- GESTIONE TRACKING QR CODE ---
-        if (session.isImmersive && frame.getImageTrackingResults) {
-          const results = frame.getImageTrackingResults();
-          let found = false;
-          for (const result of results) {
-            if (result.trackingState === 'tracked') {
-              const pose = frame.getPose(result.imageSpace, refSpace);
-              if (pose) {
-                solarSystem.visible = true;
-                // Sovrascrive la matrice del modello con quella del QR Code
-                solarSystem.matrix = pose.transform.matrix;
-                found = true;
-              }
-            }
-          }
-          // Se vuoi che sparisca quando perdi il QR, scommenta:
-          // if (!found) solarSystem.visible = false;
-        }
+        let refSpace = session.isImmersive ?
+                         xrImmersiveRefSpace :
+                         inlineViewerHelper.referenceSpace;
+        let pose = frame.getViewerPose(refSpace);
 
         scene.startFrame();
+
         session.requestAnimationFrame(onXRFrame);
-        let pose = frame.getViewerPose(refSpace);
+
         scene.drawXRFrame(frame, pose);
+
         scene.endFrame();
       }
 
+      // Start the XR application.
       initXR();
     </script>
   </body>
