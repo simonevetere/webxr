@@ -4,16 +4,13 @@
     <meta charset='utf-8'>
     <meta name='viewport' content='width=device-width, initial-scale=1, user-scalable=no'>
     <link rel='stylesheet' href='css/common.css'>
-    <title>AR con Parametri URL</title>
+    <title>AR QR-Tracking Sunflower</title>
   </head>
   <body>
     <header>
       <details open>
-        <summary>Parametri X e Y via URL</summary>
-        <p>
-          Usa i parametri nell'URL per spostare l'oggetto. <br>
-          Esempio: <code>?x=0.5&y=-1</code>
-        </p>
+        <summary>QR Tracking</summary>
+        <p>Inquadra il QR code per far apparire il girasole.</p>
       </details>
     </header>
     <script type="module">
@@ -21,105 +18,92 @@
       import {Scene} from './js/render/scenes/scene.js';
       import {Renderer, createWebGLContext} from './js/render/core/renderer.js';
       import {Gltf2Node} from './js/render/nodes/gltf2.js';
-      import {InlineViewerHelper} from './js/util/inline-viewer-helper.js';
       import {QueryArgs} from './js/util/query-args.js';
-      import WebXRPolyfill from './js/third-party/webxr-polyfill/build/webxr-polyfill.module.js';
-
-      if (QueryArgs.getBool('usePolyfill', true)) {
-        let polyfill = new WebXRPolyfill();
-      }
 
       let xrButton = null;
       let xrImmersiveRefSpace = null;
-      let inlineViewerHelper = null;
       let gl = null;
       let renderer = null;
       let scene = new Scene();
-      
-      // Disattiva il contatore FPS
-      scene.enableStats(false); 
+      scene.enableStats(false);
 
-      // --- LOGICA PARAMETRI URL ---
-      // Leggiamo x e y dall'URL. Se mancano, usiamo i valori di default [0, -0.5]
-      let xParam = QueryArgs.getFloat('x', 0);
-      let yParam = QueryArgs.getFloat('y', -0.5);
-      let zParam = -1; // Z fisso come richiesto
+      // Carichiamo il modello del girasole (inizialmente nascosto)
+      let sunflower = new Gltf2Node({url: 'media/gltf/sunflower/sunflower.gltf'});
+      sunflower.visible = false; 
+      scene.addNode(sunflower);
 
-      // Caricamento oggetto (Girasole)
-      let oggettoSingolo = new Gltf2Node({url: 'media/gltf/sunflower/sunflower.gltf'}); 
-      
-      // Applichiamo la traslazione usando i parametri URL
-      oggettoSingolo.translation = [xParam, yParam, zParam]; 
-      oggettoSingolo.scale = [0.5, 0.5, 0.5]; 
-
-      scene.addNode(oggettoSingolo);
-      // ----------------------------
-
-      function initXR() {
+      async function initXR() {
         xrButton = new WebXRButton({
           onRequestSession: onRequestSession,
-          onEndSession: onEndSession,
-          textEnterXRTitle: "AVVIA AR",
-          textXRNotFoundTitle: "AR NON DISPONIBILE",
-          textExitXRTitle: "ESCI DA AR",
+          onEndSession: (session) => session.end()
         });
         document.querySelector('header').appendChild(xrButton.domElement);
 
         if (navigator.xr) {
-          navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
-            xrButton.enabled = supported;
-          });
-          navigator.xr.requestSession('inline').then(onSessionStarted);
+          const supported = await navigator.xr.isSessionSupported('immersive-ar');
+          xrButton.enabled = supported;
         }
       }
 
-      function onRequestSession() {
-        return navigator.xr.requestSession('immersive-ar')
-            .then((session) => {
-              xrButton.setSession(session);
-              session.isImmersive = true;
-              onSessionStarted(session);
-            });
+      async function onRequestSession() {
+        // 1. Prepariamo l'immagine di riferimento (il QR code)
+        const img = document.createElement('img');
+        img.src = 'media/textures/qr-code.png'; // IL TUO QR CODE SALVATO
+        await img.decode();
+        const bitmap = await createImageBitmap(img);
+
+        // 2. Richiediamo la sessione con Image Tracking
+        return navigator.xr.requestSession('immersive-ar', {
+          requiredFeatures: ['image-tracking'],
+          trackedImages: [{
+            image: bitmap,
+            widthInMeters: 0.05 // Specifica la grandezza reale del QR (es. 10cm)
+          }]
+        }).then((session) => {
+          xrButton.setSession(session);
+          onSessionStarted(session);
+        });
+      }
+
+      function onSessionStarted(session) {
+        initGL();
+        session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
+        session.requestReferenceSpace('local').then((refSpace) => {
+          xrImmersiveRefSpace = refSpace;
+          session.requestAnimationFrame(onXRFrame);
+        });
       }
 
       function initGL() {
         if (gl) return;
         gl = createWebGLContext({ xrCompatible: true });
-        document.body.appendChild(gl.canvas);
-        const onResize = () => {
-          gl.canvas.width = gl.canvas.clientWidth * window.devicePixelRatio;
-          gl.canvas.height = gl.canvas.clientHeight * window.devicePixelRatio;
-        };
-        window.addEventListener('resize', onResize);
-        onResize();
         renderer = new Renderer(gl);
         scene.setRenderer(renderer);
       }
 
-      function onSessionStarted(session) {
-        session.addEventListener('end', onSessionEnded);
-        initGL();
-        session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
-        let refSpaceType = session.isImmersive ? 'local' : 'viewer';
-        session.requestReferenceSpace(refSpaceType).then((refSpace) => {
-          if (session.isImmersive) {
-            xrImmersiveRefSpace = refSpace;
-          } else {
-            inlineViewerHelper = new InlineViewerHelper(gl.canvas, refSpace);
-          }
-          session.requestAnimationFrame(onXRFrame);
-        });
-      }
-
-      function onEndSession(session) { session.end(); }
-      function onSessionEnded(event) { if (event.session.isImmersive) { xrButton.setSession(null); } }
-
       function onXRFrame(t, frame) {
         let session = frame.session;
-        let refSpace = session.isImmersive ? xrImmersiveRefSpace : inlineViewerHelper.referenceSpace;
-        let pose = frame.getViewerPose(refSpace);
-        scene.startFrame();
         session.requestAnimationFrame(onXRFrame);
+        let pose = frame.getViewerPose(xrImmersiveRefSpace);
+
+        // 3. Cerchiamo il QR code nei risultati del tracking
+        const results = frame.getImageTrackingResults();
+        for (const result of results) {
+          if (result.trackingState == 'tracked') {
+            // Otteniamo la posizione del QR rispetto al mondo reale
+            const imagePose = frame.getPose(result.imageSpace, xrImmersiveRefSpace);
+            if (imagePose) {
+              sunflower.visible = true;
+              // Posizioniamo il girasole esattamente sopra il QR
+              sunflower.matrix = imagePose.transform.matrix;
+            }
+          } else {
+            // Se perdiamo il QR, possiamo decidere di nascondere l'oggetto
+            sunflower.visible = false;
+          }
+        }
+
+        scene.startFrame();
         scene.drawXRFrame(frame, pose);
         scene.endFrame();
       }
