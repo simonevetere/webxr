@@ -9,15 +9,14 @@
   <body>
     <header>
       <details open>
-        <summary>QR Tracking Animato</summary>
-        <p>Il girasole ora è piccolo e ruota sopra il QR code.</p>
+        <summary>QR Tracking</summary>
+        <p>Inquadra il QR code per far apparire il girasole.</p>
       </details>
     </header>
     <script type="module">
       import {WebXRButton} from './js/util/webxr-button.js';
       import {Scene} from './js/render/scenes/scene.js';
       import {Renderer, createWebGLContext} from './js/render/core/renderer.js';
-      import {Node} from './js/render/core/node.js'; // Importante per la gerarchia
       import {Gltf2Node} from './js/render/nodes/gltf2.js';
       import {QueryArgs} from './js/util/query-args.js';
 
@@ -28,19 +27,10 @@
       let scene = new Scene();
       scene.enableStats(false);
 
-      // 1. Creiamo un "contenitore" (trackingNode)
-      let trackingNode = new Node();
-      trackingNode.visible = false;
-      scene.addNode(trackingNode);
-
-      // 2. Carichiamo il girasole come FIGLIO del contenitore
+      // Carichiamo il modello del girasole (inizialmente nascosto)
       let sunflower = new Gltf2Node({url: 'media/gltf/sunflower/sunflower.gltf'});
-      
-      // SCALA: 0.05 significa circa 5-10cm se il modello originale era 1-2 metri
-      sunflower.scale = [0.05, 0.05, 0.05]; 
-      
-      // Aggiungiamo il girasole al contenitore
-      trackingNode.addNode(sunflower);
+      sunflower.visible = false; 
+      scene.addNode(sunflower);
 
       async function initXR() {
         xrButton = new WebXRButton({
@@ -56,18 +46,18 @@
       }
 
       async function onRequestSession() {
-        // Prepariamo l'immagine del QR code
+        // 1. Prepariamo l'immagine di riferimento (il QR code)
         const img = document.createElement('img');
-        img.src = 'media/textures/qr-code.png'; 
+        img.src = 'media/textures/qr-code.png'; // IL TUO QR CODE SALVATO
         await img.decode();
         const bitmap = await createImageBitmap(img);
 
-        // Richiediamo la sessione con Image Tracking (Richiede chrome://flags)
+        // 2. Richiediamo la sessione con Image Tracking
         return navigator.xr.requestSession('immersive-ar', {
           requiredFeatures: ['image-tracking'],
           trackedImages: [{
             image: bitmap,
-            widthInMeters: 0.05 // Dimensione reale del QR stampato (5cm)
+            widthInMeters: 0.05 // Specifica la grandezza reale del QR (es. 10cm)
           }]
         }).then((session) => {
           xrButton.setSession(session);
@@ -96,24 +86,20 @@
         session.requestAnimationFrame(onXRFrame);
         let pose = frame.getViewerPose(xrImmersiveRefSpace);
 
-        // Cerchiamo il QR code
+        // 3. Cerchiamo il QR code nei risultati del tracking
         const results = frame.getImageTrackingResults();
-        
-        if (results.length > 0) {
-          const result = results[0]; // Prendiamo il primo QR trovato
-          
+        for (const result of results) {
           if (result.trackingState == 'tracked') {
+            // Otteniamo la posizione del QR rispetto al mondo reale
             const imagePose = frame.getPose(result.imageSpace, xrImmersiveRefSpace);
             if (imagePose) {
-              trackingNode.visible = true;
-              // Applichiamo la posizione del QR al CONTENITORE
-              trackingNode.matrix = imagePose.transform.matrix;
-              
-              // ANIMAZIONE: Facciamo ruotare il girasole sul suo asse Y
-              sunflower.rotation = [0, t / 1000, 0]; 
+              sunflower.visible = true;
+              // Posizioniamo il girasole esattamente sopra il QR
+              sunflower.matrix = imagePose.transform.matrix;
             }
           } else {
-            trackingNode.visible = false;
+            // Se perdiamo il QR, possiamo decidere di nascondere l'oggetto
+            sunflower.visible = false;
           }
         }
 
