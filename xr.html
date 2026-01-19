@@ -1,26 +1,133 @@
-<script src="https://unpkg.com/html5-qrcode"></script>
+<!doctype html>
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1, user-scalable=no'>
+    <link rel='stylesheet' href='css/common.css'>
+    <title>QR to WebXR</title>
+    <script src="https://unpkg.com/@zxing/library@latest"></script>
+    <style>
+      #overlay { position: absolute; top: 20px; left: 20px; z-index: 10; background: rgba(0,0,0,0.7); color: white; padding: 15px; border-radius: 10px; font-family: sans-serif; }
+      #video-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
+      #qr-canvas { position: absolute; top: 0; left: 0; pointer-events: none; }
+      #btn-start-ar { display: none; position: fixed; bottom: 50px; left: 50%; transform: translateX(-50%); padding: 20px 40px; font-size: 1.2rem; background: #22a7f0; color: white; border: none; border-radius: 50px; cursor: pointer; z-index: 100; }
+    </style>
+  </head>
+  <body>
+    
+    <div id="overlay">
+      <div id="status">Inquadra il QR Code della raccomandata...</div>
+    </div>
 
-<div id="scanner-container">
-  <div id="reader" style="width: 100%;"></div>
-  <button id="start-ar-btn" style="display:none; font-size: 20px; padding: 20px;">
-    QR Riconosciuto! Clicca qui per l'AR
-  </button>
-</div>
+    <button id="btn-start-ar">AVVIA AR SUL QR</button>
 
-<script>
-  const html5QrCode = new Html5Qrcode("reader");
-  const qrCodeSuccessCallback = (decodedText, decodedResult) => {
-      // 1. Ferma lo scanner
-      html5QrCode.stop();
-      document.getElementById('reader').style.display = 'none';
-      
-      // 2. Mostra il bottone per entrare in WebXR
-      const btn = document.getElementById('start-ar-btn');
-      btn.style.display = 'block';
-      
-      // 3. Salva i dati del QR per usarli in AR (opzionale)
-      window.qrData = decodedText; 
-  };
+    <div id="video-container">
+      <video id="video" style="width: 100%; height: 100%; object-fit: cover;"></video>
+      <canvas id="qr-canvas"></canvas>
+    </div>
 
-  html5QrCode.start({ facingMode: "environment" }, { fps: 10 }, qrCodeSuccessCallback);
-</script>
+    <script type="module">
+      import {WebXRButton} from './js/util/webxr-button.js';
+      import {Scene} from './js/render/scenes/scene.js';
+      import {Renderer, createWebGLContext} from './js/render/core/renderer.js';
+      import {Gltf2Node} from './js/render/nodes/gltf2.js';
+
+      const video = document.getElementById('video');
+      const canvas = document.getElementById('qr-canvas');
+      const ctx = canvas.getContext('2d');
+      const btnStartAR = document.getElementById('btn-start-ar');
+      const codeReader = new ZXing.BrowserQRCodeReader();
+
+      let qrCenter = { x: 0.5, y: 0.5 }; // Coordinate normalizzate (0-1)
+      let xrSession = null;
+      let gl, renderer, scene = new Scene();
+      let model = new Gltf2Node({url: 'media/gltf/space/space.gltf'});
+      model.scale = [0.2, 0.2, 0.2];
+      model.visible = false;
+      scene.addNode(model);
+
+      // --- FASE 1: SCANNER QR STANDARD (NO FLAGS) ---
+      async function startScanner() {
+        const videoDevices = await codeReader.getVideoInputDevices();
+        const selectedDeviceId = videoDevices[0].deviceId;
+
+        codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
+          if (result) {
+            // Trovato QR! Calcoliamo il centro basandoci sui punti del QR
+            const points = result.getResultPoints();
+            const centerX = (points[0].x + points[1].x + points[2].x) / 3;
+            const centerY = (points[0].y + points[1].y + points[2].y) / 3;
+
+            // Normalizziamo le coordinate per WebXR (da 0 a 1)
+            qrCenter.x = centerX / video.videoWidth;
+            qrCenter.y = centerY / video.videoHeight;
+
+            document.getElementById('status').innerText = "QR Rilevato! Premi il tasto blu.";
+            btnStartAR.style.display = 'block';
+          }
+        });
+      }
+
+      // --- FASE 2: PASSAGGIO A WEBXR ---
+      btnStartAR.onclick = () => {
+        // Interrompiamo lo scanner video
+        codeReader.reset();
+        video.srcObject.getTracks().forEach(track => track.stop());
+        document.getElementById('video-container').style.display = 'none';
+        
+        // Avviamo la sessione WebXR Hit-Test (Standard)
+        navigator.xr.requestSession('immersive-ar', {
+          requiredFeatures: ['hit-test']
+        }).then(onSessionStarted);
+      };
+
+      function onSessionStarted(session) {
+        xrSession = session;
+        initGL();
+        session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
+        
+        session.requestReferenceSpace('viewer').then((refSpace) => {
+          // Creiamo una sorgente di Hit Test basata sulle coordinate X,Y del QR
+          session.requestHitTestSource({ space: refSpace, offsetRay: new XRRay({
+            x: (qrCenter.x * 2) - 1, // Trasforma da [0,1] a [-1,1] per WebXR
+            y: (qrCenter.y * -2) + 1 
+          })}).then((source) => {
+            session.hitTestSource = source;
+          });
+        });
+
+        session.requestReferenceSpace('local').then(ref => {
+          session.localRefSpace = ref;
+          session.requestAnimationFrame(onXRFrame);
+        });
+      }
+
+      function onXRFrame(t, frame) {
+        let session = frame.session;
+        session.requestAnimationFrame(onXRFrame);
+
+        if (session.hitTestSource) {
+          const hitTestResults = frame.getHitTestResults(session.hitTestSource);
+          if (hitTestResults.length > 0) {
+            const pose = hitTestResults[0].getPose(session.localRefSpace);
+            model.visible = true;
+            model.matrix = pose.transform.matrix;
+            // Una volta piazzato, possiamo distruggere la sorgente per "bloccarlo" lì
+            session.hitTestSource = null; 
+          }
+        }
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER, session.renderState.baseLayer.framebuffer);
+        renderer.draw(scene, frame.getViewerPose(session.localRefSpace));
+      }
+
+      function initGL() {
+        gl = createWebGLContext({ xrCompatible: true });
+        renderer = new Renderer(gl);
+        scene.setRenderer(renderer);
+      }
+
+      startScanner();
+    </script>
+  </body>
+</html>
