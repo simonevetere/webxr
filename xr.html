@@ -3,21 +3,16 @@
   <head>
     <meta charset='utf-8'>
     <meta name='viewport' content='width=device-width, initial-scale=1, user-scalable=no'>
-    <meta name='mobile-web-app-capable' content='yes'>
-    <meta name='apple-mobile-web-app-capable' content='yes'>
-    <link rel='icon' type='image/png' sizes='32x32' href='favicon-32x32.png'>
-    <link rel='icon' type='image/png' sizes='96x96' href='favicon-96x96.png'>
     <link rel='stylesheet' href='css/common.css'>
-
-    <title>Immersive AR - Oggetto Singolo</title>
+    <title>AR con Parametri URL</title>
   </head>
   <body>
     <header>
       <details open>
-        <summary>Sessione AR Pulita</summary>
+        <summary>Parametri X e Y via URL</summary>
         <p>
-          In questa versione l'oggetto è centrato e i dati FPS sono nascosti.
-          <a class="back" href="./">Indietro</a>
+          Usa i parametri nell'URL per spostare l'oggetto. <br>
+          Esempio: <code>?x=0.5&y=-1</code>
         </p>
       </details>
     </header>
@@ -34,32 +29,31 @@
         let polyfill = new WebXRPolyfill();
       }
 
-      // Variabili globali
       let xrButton = null;
       let xrImmersiveRefSpace = null;
       let inlineViewerHelper = null;
       let gl = null;
       let renderer = null;
-
-      // 1. Inizializzazione Scena
       let scene = new Scene();
       
-      // --- RIGA PER TOGLIERE IL DISPLAY FPS ---
+      // Disattiva il contatore FPS
       scene.enableStats(false); 
 
-      // 2. Caricamento Oggetto Singolo
-      // Nota: se 'sunflower' non carica, usa 'media/gltf/space/space.gltf'
+      // --- LOGICA PARAMETRI URL ---
+      // Leggiamo x e y dall'URL. Se mancano, usiamo i valori di default [0, -0.5]
+      let xParam = QueryArgs.getFloat('x', 0);
+      let yParam = QueryArgs.getFloat('y', -0.5);
+      let zParam = -1; // Z fisso come richiesto
+
+      // Caricamento oggetto (Girasole)
       let oggettoSingolo = new Gltf2Node({url: 'media/gltf/sunflower/sunflower.gltf'}); 
       
-      // Posizionamento: [X, Y, Z] -> 0 (centro), -0.5 (altezza petto), -1 (1 metro avanti)
-      oggettoSingolo.translation = [0, -0.5, -1]; 
-      
-      // Scala: 0.5 è il 50% della dimensione originale
+      // Applichiamo la traslazione usando i parametri URL
+      oggettoSingolo.translation = [xParam, yParam, zParam]; 
       oggettoSingolo.scale = [0.5, 0.5, 0.5]; 
-      
-      scene.addNode(oggettoSingolo);
 
-      // --- SKYBOX RIMOSSA PER AR PULITA ---
+      scene.addNode(oggettoSingolo);
+      // ----------------------------
 
       function initXR() {
         xrButton = new WebXRButton({
@@ -92,14 +86,12 @@
         if (gl) return;
         gl = createWebGLContext({ xrCompatible: true });
         document.body.appendChild(gl.canvas);
-
-        function onResize() {
+        const onResize = () => {
           gl.canvas.width = gl.canvas.clientWidth * window.devicePixelRatio;
           gl.canvas.height = gl.canvas.clientHeight * window.devicePixelRatio;
-        }
+        };
         window.addEventListener('resize', onResize);
         onResize();
-
         renderer = new Renderer(gl);
         scene.setRenderer(renderer);
       }
@@ -107,9 +99,7 @@
       function onSessionStarted(session) {
         session.addEventListener('end', onSessionEnded);
         initGL();
-
         session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
-
         let refSpaceType = session.isImmersive ? 'local' : 'viewer';
         session.requestReferenceSpace(refSpaceType).then((refSpace) => {
           if (session.isImmersive) {
@@ -121,21 +111,13 @@
         });
       }
 
-      function onEndSession(session) {
-        session.end();
-      }
-
-      function onSessionEnded(event) {
-        if (event.session.isImmersive) {
-          xrButton.setSession(null);
-        }
-      }
+      function onEndSession(session) { session.end(); }
+      function onSessionEnded(event) { if (event.session.isImmersive) { xrButton.setSession(null); } }
 
       function onXRFrame(t, frame) {
         let session = frame.session;
         let refSpace = session.isImmersive ? xrImmersiveRefSpace : inlineViewerHelper.referenceSpace;
         let pose = frame.getViewerPose(refSpace);
-
         scene.startFrame();
         session.requestAnimationFrame(onXRFrame);
         scene.drawXRFrame(frame, pose);
