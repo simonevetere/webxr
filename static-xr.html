@@ -3,79 +3,72 @@
   <head>
     <meta charset='utf-8'>
     <meta name='viewport' content='width=device-width, initial-scale=1, user-scalable=no'>
+    <meta name='mobile-web-app-capable' content='yes'>
+    <meta name='apple-mobile-web-app-capable' content='yes'>
     <link rel='stylesheet' href='css/common.css'>
-    <title>AR Sunflower - Standalone</title>
+    <title>AR Sunflower - Default Mode</title>
   </head>
   <body>
     <header>
       <details open>
-        <summary>AR Mode</summary>
-        <p>Clicca il pulsante sotto per vedere il girasole apparire davanti a te.</p>
+        <summary>Immersive AR Sunflower</summary>
+        <p>Il girasole apparirà nella posizione iniziale del visore. <a class="back" href="./">Indietro</a></p>
       </details>
     </header>
     <script type="module">
       import {WebXRButton} from './js/util/webxr-button.js';
       import {Scene} from './js/render/scenes/scene.js';
       import {Renderer, createWebGLContext} from './js/render/core/renderer.js';
-      import {Node} from './js/render/core/node.js';
+      import {SkyboxNode} from './js/render/nodes/skybox.js';
+      import {InlineViewerHelper} from './js/util/inline-viewer-helper.js';
       import {Gltf2Node} from './js/render/nodes/gltf2.js';
+      import {QueryArgs} from './js/util/query-args.js';
 
+      // XR globals
       let xrButton = null;
       let xrImmersiveRefSpace = null;
+      let inlineViewerHelper = null;
+
+      // WebGL scene globals
       let gl = null;
       let renderer = null;
       let scene = new Scene();
-      scene.enableStats(false);
-      
-      // Creiamo il nodo e lo rendiamo subito visibile
-      let trackingNode = new Node();
-      trackingNode.visible = true; 
-      scene.addNode(trackingNode);
 
-      // Carichiamo il girasole
+      // CARICAMENTO GIRASOLE (al posto del sistema solare)
       let sunflower = new Gltf2Node({url: 'media/gltf/sunflower/sunflower.gltf'});
-      sunflower.scale = [0.1, 0.1, 0.1]; 
-      
-      // Lo posizioniamo 1 metro avanti (-1 su Z) e leggermente in basso (-0.5 su Y)
-      sunflower.position = [0, 0, 0]; 
-      trackingNode.addNode(sunflower);
+      sunflower.scale = [0.1, 0.1, 0.1]; // Rimpicciolito come l'originale
+      sunflower.translation = [0, -0.5, -1]; // Lo mettiamo 1 metro avanti e un po' basso così lo vedi subito
+      scene.addNode(sunflower);
 
-      async function initXR() {
+      // Skybox solo per la vista 2D nel browser
+      let skybox = new SkyboxNode({url: 'media/textures/milky-way-4k.png'});
+      scene.addNode(skybox);
+
+      function initXR() {
         xrButton = new WebXRButton({
           onRequestSession: onRequestSession,
-          onEndSession: (session) => session.end()
+          onEndSession: (session) => session.end(),
+          textEnterXRTitle: "START AR",
+          textXRNotFoundTitle: "AR NOT FOUND",
+          textExitXRTitle: "EXIT AR",
         });
         document.querySelector('header').appendChild(xrButton.domElement);
 
         if (navigator.xr) {
-          try {
-            const supported = await navigator.xr.isSessionSupported('immersive-ar');
+          navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
             xrButton.enabled = supported;
-          } catch (e) {
-            console.error("Supporto XR non disponibile:", e);
-          }
+          });
+          navigator.xr.requestSession('inline').then(onSessionStarted);
         }
       }
 
       function onRequestSession() {
-        // Chiediamo solo il permesso 'local' (standard e veloce)
         return navigator.xr.requestSession('immersive-ar', {
-          requiredFeatures: ['local']
+          requiredFeatures: ['local'] // Il modo più stabile per Quest 3
         }).then((session) => {
           xrButton.setSession(session);
+          session.isImmersive = true;
           onSessionStarted(session);
-        }).catch(err => {
-          console.error("Errore avvio sessione:", err);
-        });
-      }
-
-      function onSessionStarted(session) {
-        initGL();
-        session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
-        
-        session.requestReferenceSpace('local').then((refSpace) => {
-          xrImmersiveRefSpace = refSpace;
-          session.requestAnimationFrame(onXRFrame);
         });
       }
 
@@ -87,15 +80,43 @@
         scene.setRenderer(renderer);
       }
 
+      function onSessionStarted(session) {
+        session.addEventListener('end', () => {
+          if (session.isImmersive) {
+            xrButton.setSession(null);
+            skybox.visible = true;
+          }
+        });
+
+        if (session.isImmersive) {
+          skybox.visible = false; // Nascondiamo lo sfondo per vedere la stanza (Passthrough)
+        }
+
+        initGL();
+        session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
+
+        let refSpaceType = session.isImmersive ? 'local' : 'viewer';
+        session.requestReferenceSpace(refSpaceType).then((refSpace) => {
+          if (session.isImmersive) {
+            xrImmersiveRefSpace = refSpace;
+          } else {
+            inlineViewerHelper = new InlineViewerHelper(gl.canvas, refSpace);
+          }
+          session.requestAnimationFrame(onXRFrame);
+        });
+      }
+
       function onXRFrame(t, frame) {
         let session = frame.session;
-        session.requestAnimationFrame(onXRFrame);
-        let pose = frame.getViewerPose(xrImmersiveRefSpace);
+        let refSpace = session.isImmersive ? xrImmersiveRefSpace : inlineViewerHelper.referenceSpace;
+        let pose = frame.getViewerPose(refSpace);
 
-        // Facciamo ruotare il girasole su se stesso per renderlo vivo
-        sunflower.rotation = [0, t / 1000, 0]; 
+        // Facciamo ruotare il girasole esattamente come nel sistema solare
+        sunflower.matrix[12] = sunflower.matrix[12]; // Manteniamo la posizione
+        // Se vuoi una rotazione extra, puoi aggiungerla qui
 
         scene.startFrame();
+        session.requestAnimationFrame(onXRFrame);
         scene.drawXRFrame(frame, pose);
         scene.endFrame();
       }
