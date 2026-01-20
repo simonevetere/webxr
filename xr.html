@@ -25,8 +25,9 @@
       let gl = null;
       let renderer = null;
       let scene = new Scene();
+      scene.enableStats(false);
       let trackingNode = new Node();
-      let qrBitmap = null; // Variabile globale per la bitmap
+      let qrBitmap = null;
 
       trackingNode.visible = false;
       scene.addNode(trackingNode);
@@ -43,7 +44,6 @@
         document.querySelector('header').appendChild(xrButton.domElement);
 
         if (navigator.xr) {
-          // 1. Pre-carichiamo l'immagine SUBITO
           try {
             const img = document.createElement('img');
             img.src = 'media/textures/qr-code.png'; 
@@ -111,7 +111,7 @@
             }
           }
           if (!found) {
-              // Opzionale: puoi scegliere di non nasconderlo subito per evitare sfarfallio
+            trackingNode.visible = true;
           }
         }
 
