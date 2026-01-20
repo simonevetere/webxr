@@ -10,15 +10,17 @@
   <link rel='icon' type='image/png' sizes='96x96' href='./favicon-96x96.png'>
   <link rel='stylesheet' href='./css/common.css'>
 
-  <title>AR Solar System with Hands</title>
+  <title>Immersive Session with hands</title>
 </head>
 
 <body>
   <header>
     <details open>
-      <summary>AR Solar System & Hands</summary>
+      <summary>Immersive VR Session with hands</summary>
       <p>
-        In questo esempio vedrai il sistema solare e le tue mani (rappresentate da cubi) in Realtà Aumentata.
+        This sample demonstrates a simple VR session that shows the user's hands.
+        If your device supports this feature, you will see your hands using a set
+        of cubes. Each cube represents a joint in your hand.
         <a class="back" href="./">Back</a>
       </p>
     </details>
@@ -36,22 +38,24 @@
     import { BoxBuilder } from './js/render/geometry/box-builder.js';
     import { PbrMaterial } from './js/render/materials/pbr.js';
     import { QueryArgs } from './js/util/query-args.js';
-    import { mat4 } from './js/render/math/gl-matrix.js';
-    import { vec3 } from './js/render/math/gl-matrix.js';
-    import { Ray } from './js/render/math/ray.js';
+    import {mat4} from './js/render/math/gl-matrix.js';
+    import {vec3} from './js/render/math/gl-matrix.js';
+    import {Ray} from './js/render/math/ray.js';
 
+    // This library matches XRInputSource profiles to available controller models for us.
     import { fetchProfile } from 'https://cdn.jsdelivr.net/npm/@webxr-input-profiles/motion-controllers@1.0/dist/motion-controllers.module.js';
 
+    // The path of the CDN the sample will fetch controller models from.
     const DEFAULT_PROFILES_PATH = 'https://cdn.jsdelivr.net/npm/@webxr-input-profiles/assets@1.0/dist/profiles';
 
     // XR globals.
     let xrButton = null;
     let xrRefSpace = null;
-    let isAR = true; // Forziamo AR come predefinito
+    let isAR = true;
     let radii = new Float32Array(25);
-    let positions = new Float32Array(16 * 25);
-
-    // Boxes per le mani
+    let positions = new Float32Array(16*25);
+    
+    // Boxes
     let boxes_left = [];
     let boxes_right = [];
     let boxes_none = [];
@@ -71,26 +75,19 @@
     let gl = null;
     let renderer = null;
     let scene = new Scene();
-
-    // AGGIUNTA SISTEMA SOLARE (dall'esempio AR)
-    let solarSystem = new Gltf2Node({ url: 'media/gltf/space/space.gltf' });
-    solarSystem.scale = [0.1, 0.1, 0.1];
-    scene.addNode(solarSystem);
-
-    // Skybox (visibile solo in inline/VR)
-    let skybox = new SkyboxNode({ url: 'media/textures/milky-way-4k.png' });
-    scene.addNode(skybox);
-
-    function createBoxPrimitive(r, g, b) {
-      let boxBuilder = new BoxBuilder();
-      boxBuilder.pushCube([0, 0, 0], 1);
-      let boxPrimitive = boxBuilder.finishPrimitive(renderer);
-      let boxMaterial = new PbrMaterial();
-      boxMaterial.baseColorFactor.value = [r, g, b, 1];
-      return renderer.createRenderPrimitive(boxPrimitive, boxMaterial);
+    scene.enableStats(false);
+    scene.addNode(new Gltf2Node({ url: './media/gltf/space/space.gltf' }));
+    
+    function createBoxPrimitive(r, g, b) {  
+      let boxBuilder = new BoxBuilder();  
+      boxBuilder.pushCube([0, 0, 0], 1);  
+      let boxPrimitive = boxBuilder.finishPrimitive(renderer);  
+      let boxMaterial = new PbrMaterial();  
+      boxMaterial.baseColorFactor.value = [r, g, b, 1]; 
+      return renderer.createRenderPrimitive(boxPrimitive, boxMaterial); 
     }
 
-    function addBox(r, g, b) {
+    function addBox(x, y, z, r, g, b, offset) {
       let boxRenderPrimitive = createBoxPrimitive(r, g, b);
       let boxNode = new Node();
       boxNode.addRenderPrimitive(boxRenderPrimitive);
@@ -138,28 +135,48 @@
       indexFingerBoxes.tracked_right = addBox(0, 0, 0, rightBoxColor.r, rightBoxColor.g, rightBoxColor.b);
     }
 
+    // Checks to see if WebXR is available and, if so, queries a list of
+    // XRDevices that are connected to the system.
     function initXR() {
+      // Adds a helper button to the page that indicates if any XRDevices are
+      // available and let's the user pick between them if there's multiple.
       xrButton = new WebXRButton({
         onRequestSession: onRequestSession,
         onEndSession: onEndSession
       });
       document.querySelector('header').appendChild(xrButton.domElement);
 
+      // Is WebXR available on this UA?
       if (navigator.xr) {
-        navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
-          xrButton.enabled = supported;
+        // If the device allows creation of exclusive sessions set it as the
+        // target of the 'Enter XR' button.
+        navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+          if (supported)
+            xrButton.enabled = supported;
+          else
+            navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+              isAR = true;
+              xrButton.enabled = supported;
+            });
         });
       }
     }
 
+    // Called when the user selects a device to present to. In response we
+    // will request an exclusive session from that device.
     function onRequestSession() {
-      return navigator.xr.requestSession('immersive-ar', { 
-        optionalFeatures: ['local-floor', 'hand-tracking'] 
-      }).then(onSessionStarted);
+      return navigator.xr.requestSession(isAR?'immersive-ar':'immersive-vr', { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking'] }).then(onSessionStarted);
     }
 
+    // Called when we've successfully acquired a XRSession. In response we
+    // will set up the necessary session state and kick off the frame loop.
     function onSessionStarted(session) {
+      // This informs the 'Enter XR' button that the session has started and
+      // that it should display 'Exit XR' instead.
       xrButton.setSession(session);
+
+      // Listen for the sessions 'end' event so we can respond if the user
+      // or UA ends the session for any reason.
       session.addEventListener('end', onSessionEnded);
       session.addEventListener('inputsourceschange', onInputSourcesChange);
       // trackedSources are still experimental. Don't rely on this feature yet.
@@ -192,21 +209,38 @@
       // Create a renderer with that GL context (this is just for the samples
       // framework and has nothing to do with WebXR specifically.)
       renderer = new Renderer(gl);
+
       initHands();
+
+      // Set the scene's renderer, which creates the necessary GPU resources.
       scene.setRenderer(renderer);
 
+      // Use the new WebGL context to create a XRWebGLLayer and set it as the
+      // sessions baseLayer. This allows any content rendered to the layer to
+      // be displayed on the XRDevice.
       session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
 
+      // Get a frame of reference, which is required for querying poses. In
+      // this case an 'local' frame of reference means that all poses will
+      // be relative to the location where the XRDevice was first detected.
       session.requestReferenceSpace('local').then((refSpace) => {
-        xrRefSpace = refSpace;
+        xrRefSpace = refSpace.getOffsetReferenceSpace(new XRRigidTransform({ x: 0, y: 0, z: 0 }));
+
+        // Inform the session that we're ready to begin drawing.
         session.requestAnimationFrame(onXRFrame);
       });
     }
 
+    // Called when the user clicks the 'Exit XR' button. In response we end
+    // the session.
     function onEndSession(session) {
       session.end();
     }
 
+    // Called either when the user has explicitly ended the session (like in
+    // onEndSession()) or when the UA has ended the session for any reason.
+    // At this point the session object is no longer usable and should be
+    // discarded.
     function onSessionEnded(event) {
       xrButton.setSession(null);
 
@@ -295,20 +329,31 @@
 
         let offset = 0;
         if (!inputSource.hand) {
-          for (const box of boxes[hand_type] || []) {
+          for (const box of boxes[hand_type]) {
             scene.removeNode(box);
           }
-          continue;
-        }
+          scene.removeNode(indexFingerBoxes[hand_type]);
 
-        if (frame.fillJointRadii(inputSource.hand.values(), radii) &&
-            frame.fillPoses(inputSource.hand.values(), refSpace, positions)) {
-          
-          let offset = 0;
+          continue;
+        } else {
+          let pose = frame.getPose(inputSource.targetRaySpace, refSpace);
+          if (pose === undefined) {
+            console.log("no pose");
+          }
+
+          if (!frame.fillJointRadii(inputSource.hand.values(), radii)) {
+            console.log("no fillJointRadii");
+            continue;
+          }
+          if (!frame.fillPoses(inputSource.hand.values(), refSpace, positions)) {
+            console.log("no fillPoses");
+            continue;
+          }
           for (const box of boxes[hand_type]) {
             scene.addNode(box);
             let matrix = positions.slice(offset * 16, (offset + 1) * 16);
             let jointRadius = radii[offset];
+            offset++;
             mat4.getTranslation(box.translation, matrix);
             mat4.getRotation(box.rotation, matrix);
             box.scale = [jointRadius, jointRadius, jointRadius];
@@ -372,31 +417,77 @@
       rightInteractionBox.matrix = interactionBox.matrix;
     }
 
+    // Called every time the XRSession requests that a new frame be drawn.
     function onXRFrame(t, frame) {
       let session = frame.session;
+
+      // Per-frame scene setup. Nothing WebXR specific here.
       scene.startFrame();
+
+      // Inform the session that we're ready for the next frame.
       session.requestAnimationFrame(onXRFrame);
 
       updateInputSources(session, frame, xrRefSpace);
       updateTrackedSources(session, frame, xrRefSpace);
       UpdateInteractables(t);
 
+      // Get the XRDevice pose relative to the Frame of Reference we created
+      // earlier.
       let pose = frame.getViewerPose(xrRefSpace);
+
+      // Getting the pose may fail if, for example, tracking is lost. So we
+      // have to check to make sure that we got a valid pose before attempting
+      // to render with it. If not in this case we'll just leave the
+      // framebuffer cleared, so tracking loss means the scene will simply
+      // disappear.
       if (pose) {
         let glLayer = session.renderState.baseLayer;
+
+        // If we do have a valid pose, bind the WebGL layer's framebuffer,
+        // which is where any content to be displayed on the XRDevice must be
+        // rendered.
         gl.bindFramebuffer(gl.FRAMEBUFFER, glLayer.framebuffer);
+
+        // Clear the framebuffer
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
+        // Loop through each of the views reported by the frame and draw them
+        // into the corresponding viewport.
         for (let view of pose.views) {
           let viewport = glLayer.getViewport(view);
-          gl.viewport(viewport.x, viewport.y, viewport.width, viewport.height);
+          gl.viewport(viewport.x, viewport.y,
+            viewport.width, viewport.height);
+
+          // Draw this view of the scene. What happens in this function really
+          // isn't all that important. What is important is that it renders
+          // into the XRWebGLLayer's framebuffer, using the viewport into that
+          // framebuffer reported by the current view, and using the
+          // projection matrix and view transform from the current view.
+          // We bound the framebuffer and viewport up above, and are passing
+          // in the appropriate matrices here to be used when rendering.
           scene.draw(view.projectionMatrix, view.transform);
         }
+      } else {
+        // There's several options for handling cases where no pose is given.
+        // The simplest, which these samples opt for, is to simply not draw
+        // anything. That way the device will continue to show the last frame
+        // drawn, possibly even with reprojection. Alternately you could
+        // re-draw the scene again with the last known good pose (which is now
+        // likely to be wrong), clear to black, or draw a head-locked message
+        // for the user indicating that they should try to get back to an area
+        // with better tracking. In all cases it's possible that the device
+        // may override what is drawn here to show the user it's own error
+        // message, so it should not be anything critical to the application's
+        // use.
       }
+
+      // Per-frame scene teardown. Nothing WebXR specific here.
       scene.endFrame();
     }
 
+    // Start the XR application.
     initXR();
   </script>
 </body>
+
 </html>
