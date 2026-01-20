@@ -58,20 +58,28 @@
         }
       }
 
+
       function onRequestSession() {
-        // 2. Usiamo l'immagine già pronta e mettiamo image-tracking in optional
-        return navigator.xr.requestSession('immersive-ar', {
-          requiredFeatures: ['local'],
-          optionalFeatures: ['image-tracking'],
+        const sessionOptions = {
+          requiredFeatures: ['local'], 
+          optionalFeatures: ['image-tracking'], 
           trackedImages: [{
             image: qrBitmap,
             widthInMeters: 0.05
           }]
-        }).then((session) => {
-          xrButton.setSession(session);
-          onSessionStarted(session);
-        });
+        };
+
+        return navigator.xr.requestSession('immersive-ar', sessionOptions)
+          .then((session) => {
+            xrButton.setSession(session);
+            onSessionStarted(session);
+          })
+          .catch(err => {
+            console.error("Errore WebXR:", err);
+            alert("Il visore ha rifiutato la sessione. Controlla i permessi nelle impostazioni del Quest.");
+          });
       }
+
 
       function onSessionStarted(session) {
         initGL();
