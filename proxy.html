@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QR Scanner Redirect</title>
+    <title>XRi proxy</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
         body { 
@@ -24,22 +24,22 @@
             border-radius: 8px; 
             overflow: hidden;
         }
-        .status { margin-top: 20px; font-size: 1.2rem; color: #00ff00; }
+        .status { margin-top: 20px; font-size: 1.2rem; color: #ffffff; }
     </style>
 </head>
 <body>
 
-    <h2>Scansiona il QR Code</h2>
+    <h2>Scan QR Code</h2>
     <div id="reader"></div>
-    <div class="status" id="status">In attesa della camera...</div>
+    <div class="status" id="status">waiting for camera...</div>
 
     <script>
         const statusText = document.getElementById('status');
 
         function onScanSuccess(decodedText, decodedResult) {
             // Feedback visivo immediato
-            statusText.innerText = "QR Trovato! Reindirizzamento...";
-            statusText.style.color = "#00ff00";
+            statusText.innerText = "Redirect XR interface";
+            statusText.style.color = "#ffffff";
             
             // Redirect veloce al link trovato nel QR
             window.location.href = decodedText;
