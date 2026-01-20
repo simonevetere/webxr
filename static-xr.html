@@ -67,6 +67,8 @@
     const defaultBoxColor = {r: 0.5, g: 0.5, b: 0.5};
     const leftBoxColor = {r: 1, g: 0, b: 1};
     const rightBoxColor = {r: 0, g: 1, b: 1};
+    
+    const INITIAL_POSITION = [0, 0, -0.65];
     let isGrabbing = false;
     let grabbingHand = null;
 
@@ -377,59 +379,73 @@
       }
     }
     
+    function isPalmUp(pose) {
+      if (!pose) return false;
+      // La "normale" del palmo nel sistema WebXR di solito punta lungo l'asse Y della matrice del giunto
+      // Otteniamo la direzione Y della matrice di trasformazione
+      let upVector = [pose.transform.matrix[4], pose.transform.matrix[5], pose.transform.matrix[6]];
+      // Se la componente Y è vicina a 1, il palmo punta verso l'alto
+      return upVector[1] > 0.7; 
+    }
+    
     function UpdateInteractables(time, frame, refSpace) {
       if (!sunflower || !frame || !refSpace) return;
 
-      let session = frame.session;
+      let sources = frame.session.inputSources;
       let grabbedThisFrame = false;
+      let handsUpCount = 0;
 
-      for (let inputSource of session.inputSources) {
-        // Usiamo solo le mani che hanno il tracking delle dita
+      for (let inputSource of sources) {
         if (!inputSource.hand) continue;
 
-        let thumbTip = inputSource.hand.get('thumb-tip');
-        let indexTip = inputSource.hand.get('index-finger-tip');
-        let thumbPose = frame.getJointPose(thumbTip, refSpace);
-        let indexPose = frame.getJointPose(indexTip, refSpace);
+        let palmPose = frame.getJointPose(inputSource.hand.get('palm'), refSpace);
+        let thumbPose = frame.getJointPose(inputSource.hand.get('thumb-tip'), refSpace);
+        let indexPose = frame.getJointPose(inputSource.hand.get('index-finger-tip'), refSpace);
 
+        // 1. Logica di RESET: Controlla se il palmo è rivolto verso l'alto
+        if (isPalmUp(palmPose)) {
+          handsUpCount++;
+        }
+
+        // 2. Logica di DRAG (Pinch)
         if (thumbPose && indexPose) {
-          // 1. Calcola distanza tra pollice e indice (Pizzico)
           let dx = thumbPose.transform.position.x - indexPose.transform.position.x;
           let dy = thumbPose.transform.position.y - indexPose.transform.position.y;
           let dz = thumbPose.transform.position.z - indexPose.transform.position.z;
           let distanceDita = Math.sqrt(dx*dx + dy*dy + dz*dz);
 
-          // 2. Se le dita sono vicine (meno di 2cm)
-          if (distanceDita < 0.02) {
-            // Calcola distanza tra mano e girasole
+          if (distanceDita < 0.025) {
             let msx = thumbPose.transform.position.x - sunflower.translation[0];
             let msy = thumbPose.transform.position.y - sunflower.translation[1];
             let msz = thumbPose.transform.position.z - sunflower.translation[2];
-            let distanceManoOggetto = Math.sqrt(msx*msx + msy*msy + msz*msz);
+            let distManoOggetto = Math.sqrt(msx*msx + msy*msy + msz*msz);
 
-            // Se sei vicino al girasole (15cm) o lo stai già tenendo
-            if (distanceManoOggetto < 0.15 || isGrabbing) {
+            if (distManoOggetto < 0.2 || isGrabbing) {
               isGrabbing = true;
               grabbedThisFrame = true;
               
-              // Sposta il girasole esattamente tra le due dita
               sunflower.translation = [
                 (thumbPose.transform.position.x + indexPose.transform.position.x) / 2,
                 (thumbPose.transform.position.y + indexPose.transform.position.y) / 2,
                 (thumbPose.transform.position.z + indexPose.transform.position.z) / 2
               ];
               
-              // Importante: aggiorniamo la matrice del nodo per riflettere il cambio di posizione
-              // e fermiamo ogni rotazione precedente
+              // AGGIORNAMENTO MATRICE: Questo rende effettivo lo spostamento
               mat4.fromRotationTranslationScale(sunflower.matrix, [0,0,0,1], sunflower.translation, sunflower.scale);
             }
           }
         }
       }
 
-      if (!grabbedThisFrame) {
+      // 3. Esegui il RESET se entrambi i palmi sono verso l'alto
+      if (handsUpCount >= 2) {
+        sunflower.translation = [INITIAL_POSITION[0], INITIAL_POSITION[1], INITIAL_POSITION[2]];
+        // Reset della matrice alla posizione iniziale
+        mat4.fromRotationTranslationScale(sunflower.matrix, [0,0,0,1], sunflower.translation, sunflower.scale);
         isGrabbing = false;
       }
+
+      if (!grabbedThisFrame) isGrabbing = false;
     }
 
     // Called every time the XRSession requests that a new frame be drawn.
