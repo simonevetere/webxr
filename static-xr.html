@@ -67,17 +67,15 @@
     const defaultBoxColor = {r: 0.5, g: 0.5, b: 0.5};
     const leftBoxColor = {r: 1, g: 0, b: 1};
     const rightBoxColor = {r: 0, g: 1, b: 1};
-    let interactionBox = null;
-    let leftInteractionBox = null;
-    let rightInteractionBox = null;
 
     // WebGL scene globals.
     let gl = null;
     let renderer = null;
     let scene = new Scene();
     scene.enableStats(false);
-    scene.addNode(new Gltf2Node({ url: './media/gltf/space/space.gltf' }));
     
+    let sunflower = new Gltf2Node({url: 'media/gltf/sunflower/sunflower.gltf'});
+
     function createBoxPrimitive(r, g, b) {  
       let boxBuilder = new BoxBuilder();  
       boxBuilder.pushCube([0, 0, 0], 1);  
@@ -376,21 +374,10 @@
     
     function UpdateInteractables(time) {
       // Add scene objects if not present
-      if (!interactionBox) {  
-        // Add box to demonstrate hand interaction
-        function AddInteractionBox(r, g, b) { 
-          let box = new Node(); 
-          box.addRenderPrimitive(createBoxPrimitive(r, g, b));  
-          box.translation = [0, 0, -0.65];  
-          box.scale = [0.25, 0.25, 0.25]; 
-          return box; 
-        } 
-        interactionBox = AddInteractionBox(defaultBoxColor.r, defaultBoxColor.g, defaultBoxColor.b);  
-        leftInteractionBox = AddInteractionBox(leftBoxColor.r, leftBoxColor.g, leftBoxColor.b); 
-        rightInteractionBox = AddInteractionBox(rightBoxColor.r, rightBoxColor.g, rightBoxColor.b); 
-        scene.addNode(interactionBox);  
-        scene.addNode(leftInteractionBox);  
-        scene.addNode(rightInteractionBox); 
+      if (!sunflower) {
+        sunflower.translation = [0, 0, -0.65];
+        sunflower.scale = [0.25, 0.25, 0.25]; 
+        scene.addNode(sunflower);  ; 
       }
       
       function Distance(nodeA, nodeB) { 
@@ -401,20 +388,12 @@
       }
 
       // Perform distance check on interactable elements
-      const interactionDistance = interactionBox.scale[0];  
-      leftInteractionBox.visible = false; 
-      rightInteractionBox.visible = false;  
-      if (Distance(indexFingerBoxes.input_left, interactionBox) < interactionDistance) {
-        leftInteractionBox.visible = true;  
-      } else if (Distance(indexFingerBoxes.input_right, interactionBox) < interactionDistance) {
-        rightInteractionBox.visible = true; 
-      } 
-      interactionBox.visible = !(leftInteractionBox.visible || rightInteractionBox.visible);
+      const interactionDistance = sunflower.scale[0];
       
-      mat4.rotateX(interactionBox.matrix, interactionBox.matrix, time/1000);
-      mat4.rotateY(interactionBox.matrix, interactionBox.matrix, time/1500);
-      leftInteractionBox.matrix = interactionBox.matrix;
-      rightInteractionBox.matrix = interactionBox.matrix;
+      sunflower.visible = true;
+
+      mat4.rotateX(sunflower.matrix, sunflower.matrix, time/1000);
+      mat4.rotateY(sunflower.matrix, sunflower.matrix, time/1500);
     }
 
     // Called every time the XRSession requests that a new frame be drawn.
