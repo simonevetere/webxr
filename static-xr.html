@@ -209,8 +209,11 @@
       renderer = new Renderer(gl);
 
       initHands();
+    
+      sunflower.translation = [0, 0, -0.65];
+      sunflower.scale = [0.25, 0.25, 0.25];
+      scene.addNode(sunflower); 
 
-      // Set the scene's renderer, which creates the necessary GPU resources.
       scene.setRenderer(renderer);
 
       // Use the new WebGL context to create a XRWebGLLayer and set it as the
@@ -374,10 +377,9 @@
     
     function UpdateInteractables(time) {
       // Add scene objects if not present
-      if (!sunflower) {
+      if (sunflower) {
         sunflower.translation = [0, 0, -0.65];
-        sunflower.scale = [0.25, 0.25, 0.25]; 
-        scene.addNode(sunflower);  ; 
+        sunflower.scale = [0.25, 0.25, 0.25];
       }
       
       function Distance(nodeA, nodeB) { 
