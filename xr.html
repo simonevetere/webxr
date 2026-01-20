@@ -59,8 +59,10 @@
       }
 
       function onRequestSession() {
+        // 2. Usiamo l'immagine già pronta e mettiamo image-tracking in optional
         return navigator.xr.requestSession('immersive-ar', {
-          requiredFeatures: ['local', 'image-tracking'], 
+          requiredFeatures: ['local'],
+          optionalFeatures: ['image-tracking'],
           trackedImages: [{
             image: qrBitmap,
             widthInMeters: 0.05
@@ -68,12 +70,9 @@
         }).then((session) => {
           xrButton.setSession(session);
           onSessionStarted(session);
-        }).catch(err => {
-          console.error("Sessione AR non avviata:", err);
-          alert("Assicurati di aver abilitato i flag WebXR su Meta Quest!");
         });
       }
-      
+
       function onSessionStarted(session) {
         initGL();
         session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
