@@ -1,0 +1,106 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1, user-scalable=no'>
+    <link rel='stylesheet' href='css/common.css'>
+    <title>AR Sunflower - Standalone</title>
+  </head>
+  <body>
+    <header>
+      <details open>
+        <summary>AR Mode</summary>
+        <p>Clicca il pulsante sotto per vedere il girasole apparire davanti a te.</p>
+      </details>
+    </header>
+    <script type="module">
+      import {WebXRButton} from './js/util/webxr-button.js';
+      import {Scene} from './js/render/scenes/scene.js';
+      import {Renderer, createWebGLContext} from './js/render/core/renderer.js';
+      import {Node} from './js/render/core/node.js';
+      import {Gltf2Node} from './js/render/nodes/gltf2.js';
+
+      let xrButton = null;
+      let xrImmersiveRefSpace = null;
+      let gl = null;
+      let renderer = null;
+      let scene = new Scene();
+      scene.enableStats(false);
+      
+      // Creiamo il nodo e lo rendiamo subito visibile
+      let trackingNode = new Node();
+      trackingNode.visible = true; 
+      scene.addNode(trackingNode);
+
+      // Carichiamo il girasole
+      let sunflower = new Gltf2Node({url: 'media/gltf/sunflower/sunflower.gltf'});
+      sunflower.scale = [0.1, 0.1, 0.1]; 
+      
+      // Lo posizioniamo 1 metro avanti (-1 su Z) e leggermente in basso (-0.5 su Y)
+      sunflower.position = [0, -0.5, -1]; 
+      trackingNode.addNode(sunflower);
+
+      async function initXR() {
+        xrButton = new WebXRButton({
+          onRequestSession: onRequestSession,
+          onEndSession: (session) => session.end()
+        });
+        document.querySelector('header').appendChild(xrButton.domElement);
+
+        if (navigator.xr) {
+          try {
+            const supported = await navigator.xr.isSessionSupported('immersive-ar');
+            xrButton.enabled = supported;
+          } catch (e) {
+            console.error("Supporto XR non disponibile:", e);
+          }
+        }
+      }
+
+      function onRequestSession() {
+        // Chiediamo solo il permesso 'local' (standard e veloce)
+        return navigator.xr.requestSession('immersive-ar', {
+          requiredFeatures: ['local']
+        }).then((session) => {
+          xrButton.setSession(session);
+          onSessionStarted(session);
+        }).catch(err => {
+          console.error("Errore avvio sessione:", err);
+        });
+      }
+
+      function onSessionStarted(session) {
+        initGL();
+        session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
+        
+        session.requestReferenceSpace('local').then((refSpace) => {
+          xrImmersiveRefSpace = refSpace;
+          session.requestAnimationFrame(onXRFrame);
+        });
+      }
+
+      function initGL() {
+        if (gl) return;
+        gl = createWebGLContext({ xrCompatible: true });
+        document.body.appendChild(gl.canvas);
+        renderer = new Renderer(gl);
+        scene.setRenderer(renderer);
+      }
+
+      function onXRFrame(t, frame) {
+        let session = frame.session;
+        session.requestAnimationFrame(onXRFrame);
+        let pose = frame.getViewerPose(xrImmersiveRefSpace);
+
+        // Facciamo ruotare il girasole su se stesso per renderlo vivo
+        sunflower.rotation = [0, t / 1000, 0]; 
+
+        scene.startFrame();
+        scene.drawXRFrame(frame, pose);
+        scene.endFrame();
+      }
+
+      initXR();
+    </script>
+  </body>
+</html>
