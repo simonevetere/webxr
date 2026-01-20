@@ -33,14 +33,13 @@
       let gl = null;
       let renderer = null;
       let scene = new Scene();
+      scene.enableStats(false);
 
-      // CARICAMENTO GIRASOLE (al posto del sistema solare)
       let sunflower = new Gltf2Node({url: 'media/gltf/sunflower/sunflower.gltf'});
-      sunflower.scale = [0.1, 0.1, 0.1]; // Rimpicciolito come l'originale
-      sunflower.translation = [0, -0.5, -1]; // Lo mettiamo 1 metro avanti e un po' basso così lo vedi subito
+      sunflower.scale = [0.1, 0.1, 0.1];
+      sunflower.translation = [0, -0.025, 0];
       scene.addNode(sunflower);
 
-      // Skybox solo per la vista 2D nel browser
       let skybox = new SkyboxNode({url: 'media/textures/milky-way-4k.png'});
       scene.addNode(skybox);
 
@@ -110,11 +109,7 @@
         let session = frame.session;
         let refSpace = session.isImmersive ? xrImmersiveRefSpace : inlineViewerHelper.referenceSpace;
         let pose = frame.getViewerPose(refSpace);
-
-        // Facciamo ruotare il girasole esattamente come nel sistema solare
-        sunflower.matrix[12] = sunflower.matrix[12]; // Manteniamo la posizione
-        // Se vuoi una rotazione extra, puoi aggiungerla qui
-
+        
         scene.startFrame();
         session.requestAnimationFrame(onXRFrame);
         scene.drawXRFrame(frame, pose);
