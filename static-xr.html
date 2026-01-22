@@ -169,6 +169,90 @@
     // will request an exclusive session from that device.
     function onRequestSession() {
       return navigator.xr.requestSession(isAR?'immersive-ar':'immersive-vr', { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking'] }).then(onSessionStarted);
+    }// --- FUNZIONI PER IL TABLET E IL TESTO ---
+
+    /**
+     * Crea un nodo 3D che rappresenta un tablet con del testo.
+     * @param {Renderer} renderer - Il renderer WebGL globale.
+     * @param {string} initialText - Il testo iniziale da mostrare.
+     * @returns {object} - Un oggetto contenente il {node} 3D e il {canvas} 2D.
+     */
+    function createTabletNode(renderer, initialText = "Caricamento...") {
+      // 1. Prepariamo il Canvas 2D nascosto (la nostra "schermo")
+      // Usiamo dimensioni potenza di 2 per compatibilità ottimale con le texture GPU
+      const canvasCtx = document.createElement('canvas').getContext('2d');
+      canvasCtx.canvas.width = 512;
+      canvasCtx.canvas.height = 256;
+      
+      // Funzione interna per disegnare sul canvas
+      const drawToCanvas = (text) => {
+        const ctx = canvasCtx;
+        const w = ctx.canvas.width;
+        const h = ctx.canvas.height;
+
+        // Sfondo del tablet (cornice grigia)
+        ctx.fillStyle = '#333333';
+        ctx.fillRect(0, 0, w, h);
+
+        // Area dello schermo (bianca luminosa)
+        ctx.fillStyle = '#FFFFFF';
+        // Lasciamo un bordo di 20px
+        ctx.fillRect(20, 20, w - 40, h - 40); 
+
+        // Stile del testo
+        ctx.fillStyle = '#000000'; // Testo nero
+        ctx.font = 'bold 40px Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        // Disegna il testo al centro dello schermo
+        // Gestiamo testi su più righe se contengono "\n"
+        const lines = text.split('\n');
+        const lineHeight = 50;
+        const startY = h / 2 - ((lines.length - 1) * lineHeight) / 2;
+
+        lines.forEach((line, index) => {
+          ctx.fillText(line, w / 2, startY + (index * lineHeight));
+        });
+      };
+
+      // Disegna il testo iniziale
+      drawToCanvas(initialText);
+
+      // 2. Creiamo la Texture WebGL dal Canvas
+      // Nota: Stiamo usando le API di basso livello del framework fornito nell'esempio
+      const texture = renderer.createTextureFromSource(canvasCtx.canvas);
+
+      // 3. Creiamo la forma 3D (un cubo molto sottile)
+      const boxBuilder = new BoxBuilder();
+      // Spingiamo un cubo unitario centrato sull'origine
+      boxBuilder.pushCube([0, 0, 0], 1); 
+      const tabletPrimitive = boxBuilder.finishPrimitive(renderer);
+
+      // 4. Creiamo il Materiale e gli assegniamo la texture
+      const tabletMaterial = new PbrMaterial();
+      tabletMaterial.baseColorTexture.texture = texture;
+      // Rendiamolo un po' luminoso (non influenzato troppo dalle luci)
+      tabletMaterial.emissiveFactor.value = [0.5, 0.5, 0.5]; 
+
+      // 5. Creiamo il Nodo finale
+      const tabletNode = new Node();
+      tabletNode.addRenderPrimitive(renderer.createRenderPrimitive(tabletPrimitive, tabletMaterial));
+
+      // Scaliamo il nodo per farlo sembrare un tablet (largo X, alto Y, sottilissimo Z)
+      // Scala iniziale di base (poi verrà riscalato da addInteractable)
+      tabletNode.scale = [0.3, 0.2, 0.02]; 
+
+      // Ritorniamo sia il nodo 3D che la funzione per aggiornarlo
+      return {
+        node: tabletNode,
+        // Esponiamo una funzione per aggiornare il testo dall'esterno
+        updateText: (newText) => {
+            drawToCanvas(newText);
+            // Diciamo a WebGL che l'immagine sorgente è cambiata
+            texture.updateGeometry(); 
+        }
+      };
     }
 
     // Called when we've successfully acquired a XRSession. In response we
@@ -215,12 +299,23 @@
 
       initHands();
 
-      let sunflower = new Gltf2Node({url: 'media/gltf/sunflower/sunflower.gltf'});
-      addInteractable(sunflower, [0, 0, -0.65], 0.25);
+      // 1. Crea il tablet con un testo iniziale
+      let myTabletData = createTabletNode(renderer, "Benvenuto in VR!\nAfferrami.");
 
-      //let box = new Gltf2Node({url: 'media/gltf/box/box.gltf'});
-      //addInteractable(box, [0.3, 1.2, -0.5], 0.1);
+      // 2. Aggiungilo al sistema di interazione
+      // Lo posizioniamo davanti agli occhi (z = -0.5) e un po' in alto (y = 1.3)
+      // Usiamo una scala di 1.0 perché abbiamo già scalato la forma dentro createTabletNode
+      addInteractable(myTabletData.node, [0, 1.3, -0.5], 1.0);
 
+      // ESEMPIO: Come cambiare il testo dinamicamente dopo un po' di tempo
+      setTimeout(() => {
+          myTabletData.updateText("Testo Aggiornato!\nFunziona.");
+      }, 5000); // Dopo 5 secondi cambia il testo
+
+      // ESEMPIO 2: Creare un secondo tablet più piccolo
+      let infoTabletData = createTabletNode(renderer, "Info: usa due dita\nper afferrare.");
+      // Lo aggiungiamo un po' a destra e lo facciamo più piccolo (scala 0.5)
+      addInteractable(infoTabletData.node, [0.4, 1.2, -0.6], 0.5);
 
       scene.setRenderer(renderer);
 
