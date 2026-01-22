@@ -70,6 +70,9 @@
     let isGrabbing = false;
     let grabbingHand = null;
 
+    let interactables = []; 
+    let grabbedObjects = { left: null, right: null };
+
     // WebGL scene globals.
     let gl = null;
     let renderer = null;
@@ -211,10 +214,13 @@
       renderer = new Renderer(gl);
 
       initHands();
-    
-      sunflower.translation = [0, 0, -0.65];
-      sunflower.scale = [0.25, 0.25, 0.25];
-      scene.addNode(sunflower); 
+
+      let sunflower = new Gltf2Node({url: 'media/gltf/sunflower/sunflower.gltf'});
+      addInteractable(sunflower, [0, 0, -0.65], 0.25);
+
+      //let box = new Gltf2Node({url: 'media/gltf/box/box.gltf'});
+      //addInteractable(box, [0.3, 1.2, -0.5], 0.1);
+
 
       scene.setRenderer(renderer);
 
@@ -377,58 +383,99 @@
       }
     }
     
-    function UpdateInteractables(time, frame, refSpace) {
-      if (!sunflower || !frame || !refSpace) return;
 
+    /**
+     * Aggiunge un nuovo oggetto alla scena e lo rende interagibile
+     * @param {Node} node - Il nodo del modello (Gltf2Node, etc)
+     * @param {Array} position - [x, y, z]
+     * @param {number} scale - scala uniforme
+     */
+    function addInteractable(node, position = [0, 0, -0.5], scale = 0.2) {
+      node.translation = position;
+      node.scale = [scale, scale, scale];
+      
+      // Creiamo un oggetto "wrapper" con metadati
+      let interactable = {
+        node: node,
+        radius: 0.15, // Raggio entro cui si può afferrare
+        isGrabbed: false,
+        grabbingHand: null // 'input_left' o 'input_right'
+      };
+      
+      interactables.push(interactable);
+      scene.addNode(node);
+      return interactable;
+    }
+
+    /**
+     * Rimuove un oggetto dalla scena
+     */
+    function removeInteractable(interactable) {
+      scene.removeNode(interactable.node);
+      interactables = interactables.filter(i => i !== interactable);
+      // Se era in mano, libera la mano
+      if (interactable.grabbingHand) {
+        grabbedObjects[interactable.grabbingHand] = null;
+      }
+    }
+
+    function UpdateInteractables(time, frame, refSpace) {
+      if (!frame || !refSpace) return;
       let session = frame.session;
-      let grabbedThisFrame = false;
 
       for (let inputSource of session.inputSources) {
-        // Usiamo solo le mani che hanno il tracking delle dita
         if (!inputSource.hand) continue;
 
-        let thumbTip = inputSource.hand.get('thumb-tip');
-        let indexTip = inputSource.hand.get('index-finger-tip');
-        let thumbPose = frame.getJointPose(thumbTip, refSpace);
-        let indexPose = frame.getJointPose(indexTip, refSpace);
+        let handType = inputSource.handedness; // "left" o "right"
+        let thumbPose = frame.getJointPose(inputSource.hand.get('thumb-tip'), refSpace);
+        let indexPose = frame.getJointPose(inputSource.hand.get('index-finger-tip'), refSpace);
 
         if (thumbPose && indexPose) {
-          // 1. Calcola distanza tra pollice e indice (Pizzico)
+          // Calcola posizione media tra le dita (punto di pinch)
+          let pinchPos = [
+            (thumbPose.transform.position.x + indexPose.transform.position.x) / 2,
+            (thumbPose.transform.position.y + indexPose.transform.position.y) / 2,
+            (thumbPose.transform.position.z + indexPose.transform.position.z) / 2
+          ];
+
+          // Calcola distanza pinch (pizzico)
           let dx = thumbPose.transform.position.x - indexPose.transform.position.x;
           let dy = thumbPose.transform.position.y - indexPose.transform.position.y;
           let dz = thumbPose.transform.position.z - indexPose.transform.position.z;
-          let distanceDita = Math.sqrt(dx*dx + dy*dy + dz*dz);
+          let isPinching = Math.sqrt(dx*dx + dy*dy + dz*dz) < 0.03;
 
-          // 2. Se le dita sono vicine (meno di 2cm)
-          if (distanceDita < 0.02) {
-            // Calcola distanza tra mano e girasole
-            let msx = thumbPose.transform.position.x - sunflower.translation[0];
-            let msy = thumbPose.transform.position.y - sunflower.translation[1];
-            let msz = thumbPose.transform.position.z - sunflower.translation[2];
-            let distanceManoOggetto = Math.sqrt(msx*msx + msy*msy + msz*msz);
+          if (isPinching) {
+            // Se la mano è già occupata, sposta l'oggetto
+            if (grabbedObjects[handType]) {
+              let obj = grabbedObjects[handType];
+              obj.node.translation = pinchPos;
+              mat4.fromRotationTranslationScale(obj.node.matrix, [0,0,0,1], pinchPos, obj.node.scale);
+            } else {
+              // Altrimenti, cerca l'oggetto più vicino da afferrare
+              for (let obj of interactables) {
+                let ox = pinchPos[0] - obj.node.translation[0];
+                let oy = pinchPos[1] - obj.node.translation[1];
+                let oz = pinchPos[2] - obj.node.translation[2];
+                let dist = Math.sqrt(ox*ox + oy*oy + oz*oz);
 
-            // Se sei vicino al girasole (15cm) o lo stai già tenendo
-            if (distanceManoOggetto < 0.15 || isGrabbing) {
-              isGrabbing = true;
-              grabbedThisFrame = true;
-              
-              // Sposta il girasole esattamente tra le due dita
-              sunflower.translation = [
-                (thumbPose.transform.position.x + indexPose.transform.position.x) / 2,
-                (thumbPose.transform.position.y + indexPose.transform.position.y) / 2,
-                (thumbPose.transform.position.z + indexPose.transform.position.z) / 2
-              ];
-              
-              // Importante: aggiorniamo la matrice del nodo per riflettere il cambio di posizione
-              // e fermiamo ogni rotazione precedente
-              mat4.fromRotationTranslationScale(sunflower.matrix, [0,0,0,1], sunflower.translation, sunflower.scale);
+                if (dist < obj.radius) {
+                  grabbedObjects[handType] = obj;
+                  obj.isGrabbed = true;
+                  obj.grabbingHand = handType;
+                  break; 
+                }
+              }
+            }
+          } else {
+            // Se non sta più pizzicando, rilascia l'oggetto
+            if (grabbedObjects[handType]) {
+              let obj = grabbedObjects[handType];
+              obj.isGrabbed = false;
+              obj.grabbingHand = null;
+              grabbedObjects[handType] = null;
             }
           }
         }
-      }
-
-      if (!grabbedThisFrame) {
-        isGrabbing = false;
       }
     }
 
