@@ -171,75 +171,71 @@
       return navigator.xr.requestSession(isAR?'immersive-ar':'immersive-vr', { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking'] }).then(onSessionStarted);
     }// --- FUNZIONI PER IL TABLET E IL TESTO ---
 
-   /**
-     * Crea un nodo 3D che rappresenta un tablet con del testo.
-     */
-    function createTabletNode(renderer, initialText = "Caricamento...") {
-      const canvas = document.createElement('canvas');
-      const canvasCtx = canvas.getContext('2d');
-      canvas.width = 512;
-      canvas.height = 256;
+   function createTabletNode(renderer, initialText = "Caricamento...") {
+  const canvas = document.createElement('canvas');
+  const canvasCtx = canvas.getContext('2d');
+  canvas.width = 512;
+  canvas.height = 256;
 
-      const drawToCanvas = (text) => {
-        const ctx = canvasCtx;
-        const w = ctx.canvas.width;
-        const h = ctx.canvas.height;
+  const drawToCanvas = (text) => {
+    const ctx = canvasCtx;
+    ctx.fillStyle = '#333333'; // Cornice grigia
+    ctx.fillRect(0, 0, 512, 256);
+    ctx.fillStyle = '#FFFFFF'; // Schermo bianco
+    ctx.fillRect(20, 20, 472, 216);
+    ctx.fillStyle = '#000000'; // Testo nero
+    ctx.font = 'bold 40px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
 
-        // Sfondo cornice
-        ctx.fillStyle = '#333333';
-        ctx.fillRect(0, 0, w, h);
+    const lines = text.split('\n');
+    const startY = 128 - ((lines.length - 1) * 25);
+    lines.forEach((line, i) => ctx.fillText(line, 256, startY + (i * 50)));
+  };
 
-        // Area schermo
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(20, 20, w - 40, h - 40);
+  drawToCanvas(initialText);
 
-        // Stile testo
-        ctx.fillStyle = '#000000';
-        ctx.font = 'bold 40px Arial, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
+  // --- CREAZIONE MANUALE DELLA TEXTURE WEBGL ---
+  const texture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  
+  // Impostiamo i parametri per farla vedere bene
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  
+  // Carichiamo i pixel del canvas nella texture
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
 
-        const lines = text.split('\n');
-        const lineHeight = 50;
-        const startY = h / 2 - ((lines.length - 1) * lineHeight) / 2;
+  // Creiamo un wrapper che il materiale PBR possa capire
+  const textureWrapper = {
+    texture: texture
+  };
 
-        lines.forEach((line, index) => {
-          ctx.fillText(line, w / 2, startY + (index * lineHeight));
-        });
-      };
+  const boxBuilder = new BoxBuilder();
+  boxBuilder.pushCube([0, 0, 0], 1);
+  const tabletPrimitive = boxBuilder.finishPrimitive(renderer);
 
-      drawToCanvas(initialText);
+  const tabletMaterial = new PbrMaterial();
+  // Assegniamo il wrapper alla proprietà baseColorTexture
+  tabletMaterial.baseColorTexture.texture = textureWrapper;
+  tabletMaterial.emissiveFactor.value = [0.5, 0.5, 0.5];
 
-      // --- MODIFICA QUI: Il metodo corretto è createTextureFromElement ---
-      const texture = renderer.createTextureFromElement(canvas);
+  const tabletNode = new Node();
+  tabletNode.addRenderPrimitive(renderer.createRenderPrimitive(tabletPrimitive, tabletMaterial));
+  tabletNode.scale = [0.3, 0.2, 0.02];
 
-      const boxBuilder = new BoxBuilder();
-      boxBuilder.pushCube([0, 0, 0], 1);
-      const tabletPrimitive = boxBuilder.finishPrimitive(renderer);
-
-      const tabletMaterial = new PbrMaterial();
-      tabletMaterial.baseColorTexture.texture = texture;
-      tabletMaterial.emissiveFactor.value = [0.5, 0.5, 0.5];
-
-      const tabletNode = new Node();
-      tabletNode.addRenderPrimitive(renderer.createRenderPrimitive(tabletPrimitive, tabletMaterial));
-      tabletNode.scale = [0.3, 0.2, 0.02];
-
-      return {
-        node: tabletNode,
-        updateText: (newText) => {
-          drawToCanvas(newText);
-          
-          /**
-           * Per aggiornare la texture in WebGL dopo che il canvas è cambiato,
-           * dobbiamo rilegare la texture e caricare i nuovi dati.
-           */
-          gl.bindTexture(gl.TEXTURE_2D, texture._texture); // Accediamo alla texture WebGL interna
-          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
-        }
-      };
+  return {
+    node: tabletNode,
+    updateText: (newText) => {
+      drawToCanvas(newText);
+      // Aggiorniamo i pixel sulla GPU
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
     }
-
+  };
+}
     // Called when we've successfully acquired a XRSession. In response we
     // will set up the necessary session state and kick off the frame loop.
     function onSessionStarted(session) {
