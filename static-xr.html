@@ -171,42 +171,34 @@
       return navigator.xr.requestSession(isAR?'immersive-ar':'immersive-vr', { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking'] }).then(onSessionStarted);
     }// --- FUNZIONI PER IL TABLET E IL TESTO ---
 
-    /**
+   /**
      * Crea un nodo 3D che rappresenta un tablet con del testo.
-     * @param {Renderer} renderer - Il renderer WebGL globale.
-     * @param {string} initialText - Il testo iniziale da mostrare.
-     * @returns {object} - Un oggetto contenente il {node} 3D e il {canvas} 2D.
      */
     function createTabletNode(renderer, initialText = "Caricamento...") {
-      // 1. Prepariamo il Canvas 2D nascosto (la nostra "schermo")
-      // Usiamo dimensioni potenza di 2 per compatibilità ottimale con le texture GPU
-      const canvasCtx = document.createElement('canvas').getContext('2d');
-      canvasCtx.canvas.width = 512;
-      canvasCtx.canvas.height = 256;
-      
-      // Funzione interna per disegnare sul canvas
+      const canvas = document.createElement('canvas');
+      const canvasCtx = canvas.getContext('2d');
+      canvas.width = 512;
+      canvas.height = 256;
+
       const drawToCanvas = (text) => {
         const ctx = canvasCtx;
         const w = ctx.canvas.width;
         const h = ctx.canvas.height;
 
-        // Sfondo del tablet (cornice grigia)
+        // Sfondo cornice
         ctx.fillStyle = '#333333';
         ctx.fillRect(0, 0, w, h);
 
-        // Area dello schermo (bianca luminosa)
+        // Area schermo
         ctx.fillStyle = '#FFFFFF';
-        // Lasciamo un bordo di 20px
-        ctx.fillRect(20, 20, w - 40, h - 40); 
+        ctx.fillRect(20, 20, w - 40, h - 40);
 
-        // Stile del testo
-        ctx.fillStyle = '#000000'; // Testo nero
+        // Stile testo
+        ctx.fillStyle = '#000000';
         ctx.font = 'bold 40px Arial, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
-        // Disegna il testo al centro dello schermo
-        // Gestiamo testi su più righe se contengono "\n"
         const lines = text.split('\n');
         const lineHeight = 50;
         const startY = h / 2 - ((lines.length - 1) * lineHeight) / 2;
@@ -216,41 +208,34 @@
         });
       };
 
-      // Disegna il testo iniziale
       drawToCanvas(initialText);
 
-      // 2. Creiamo la Texture WebGL dal Canvas
-      // Nota: Stiamo usando le API di basso livello del framework fornito nell'esempio
-      const texture = renderer.createTextureFromSource(canvasCtx.canvas);
+      // --- MODIFICA QUI: Il metodo corretto è createTextureFromElement ---
+      const texture = renderer.createTextureFromElement(canvas);
 
-      // 3. Creiamo la forma 3D (un cubo molto sottile)
       const boxBuilder = new BoxBuilder();
-      // Spingiamo un cubo unitario centrato sull'origine
-      boxBuilder.pushCube([0, 0, 0], 1); 
+      boxBuilder.pushCube([0, 0, 0], 1);
       const tabletPrimitive = boxBuilder.finishPrimitive(renderer);
 
-      // 4. Creiamo il Materiale e gli assegniamo la texture
       const tabletMaterial = new PbrMaterial();
       tabletMaterial.baseColorTexture.texture = texture;
-      // Rendiamolo un po' luminoso (non influenzato troppo dalle luci)
-      tabletMaterial.emissiveFactor.value = [0.5, 0.5, 0.5]; 
+      tabletMaterial.emissiveFactor.value = [0.5, 0.5, 0.5];
 
-      // 5. Creiamo il Nodo finale
       const tabletNode = new Node();
       tabletNode.addRenderPrimitive(renderer.createRenderPrimitive(tabletPrimitive, tabletMaterial));
+      tabletNode.scale = [0.3, 0.2, 0.02];
 
-      // Scaliamo il nodo per farlo sembrare un tablet (largo X, alto Y, sottilissimo Z)
-      // Scala iniziale di base (poi verrà riscalato da addInteractable)
-      tabletNode.scale = [0.3, 0.2, 0.02]; 
-
-      // Ritorniamo sia il nodo 3D che la funzione per aggiornarlo
       return {
         node: tabletNode,
-        // Esponiamo una funzione per aggiornare il testo dall'esterno
         updateText: (newText) => {
-            drawToCanvas(newText);
-            // Diciamo a WebGL che l'immagine sorgente è cambiata
-            texture.updateGeometry(); 
+          drawToCanvas(newText);
+          
+          /**
+           * Per aggiornare la texture in WebGL dopo che il canvas è cambiato,
+           * dobbiamo rilegare la texture e caricare i nuovi dati.
+           */
+          gl.bindTexture(gl.TEXTURE_2D, texture._texture); // Accediamo alla texture WebGL interna
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
         }
       };
     }
