@@ -3,7 +3,7 @@
 <head>
   <meta charset='utf-8'>
   <meta name='viewport' content='width=device-width, initial-scale=1, user-scalable=no'>
-  <title>Three.js - Head Tracking Panel</title>
+  <title>Three.js - Locked Panel & Billboarding</title>
   <link rel='stylesheet' href='./css/common.css'>
   <script type="importmap">
     {
@@ -17,8 +17,8 @@
 <body>
   <header style="pointer-events: none;">
     <details open>
-      <summary>Pannello Follow-Face</summary>
-      <p>Ti segue ovunque guardi. Afferralo per spostarlo manualmente.</p>
+      <summary>Pannello Intelligente</summary>
+      <p>Pizzica la sfera rossa per BLOCCARE il pannello. Il frontale ti guarderà sempre.</p>
       <a class="back" href="./" style="pointer-events: auto;">Indietro</a>
     </details>
   </header>
@@ -28,7 +28,6 @@
     import { ARButton } from 'three/addons/webxr/ARButton.js';
     import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
 
-    // --- SETUP SCENA ---
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -43,29 +42,37 @@
 
     scene.add(new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1));
 
-    // --- CARICAMENTO TEXTURE (Eel/Subacquea) ---
+    // --- IL PANNELLO (1620x1080) ---
     const textureLoader = new THREE.TextureLoader();
     const myTexture = textureLoader.load('./media/textures/rect-mono.png');
-
-    // Pannello sottile 1cm con proporzioni corrette 1620x1080
-    const geometry = new THREE.BoxGeometry(0.45, 0.30, 0.01);
-    const material = new THREE.MeshBasicMaterial({ map: myTexture });
-    const panel = new THREE.Mesh(geometry, material);
+    const panel = new THREE.Mesh(
+      new THREE.BoxGeometry(0.45, 0.30, 0.01),
+      new THREE.MeshBasicMaterial({ map: myTexture })
+    );
     scene.add(panel);
 
-    // --- MANI ---
+    // --- IL TASTO LOCK (Sferetta nell'angolo) ---
+    const lockBtn = new THREE.Mesh(
+      new THREE.SphereGeometry(0.03),
+      new THREE.MeshBasicMaterial({ color: 0xff0000 })
+    );
+    // Posizionata nell'angolo in alto a destra del pannello
+    lockBtn.position.set(0.22, 0.15, 0.02);
+    panel.add(lockBtn); // Figlia del pannello, lo segue sempre
+
+    // --- STATO ---
+    let isLocked = false;
+    let activeGrab = null;
     const handModels = new XRHandModelFactory();
     const controllers = {
-      left: { hand: renderer.xr.getHand(0), grabbed: null },
-      right: { hand: renderer.xr.getHand(1), grabbed: null }
+      left: { hand: renderer.xr.getHand(0), grabbed: null, lastPinch: false },
+      right: { hand: renderer.xr.getHand(1), grabbed: null, lastPinch: false }
     };
 
     [controllers.left, controllers.right].forEach(c => {
       c.hand.add(handModels.createHandModel(c.hand, 'mesh'));
       scene.add(c.hand);
     });
-
-    let activeGrab = null; // Indica se il pannello è in mano a qualcuno
 
     function handleInteraction(controllerObj) {
       const hand = controllerObj.hand;
@@ -75,32 +82,43 @@
       if (!indexTip || !thumbTip || !indexTip.position) return;
 
       const distPinch = indexTip.position.distanceTo(thumbTip.position);
-      
-      if (distPinch < 0.035) { // Pizzicotto attivo
+      const isPinching = distPinch < 0.035;
+
+      if (isPinching) {
+        // 1. Controllo se sto toccando il tasto LOCK (solo al primo tocco)
+        if (!controllerObj.lastPinch) {
+          const distToLock = indexTip.position.distanceTo(lockBtn.getWorldPosition(new THREE.Vector3()));
+          if (distToLock < 0.06) {
+            isLocked = !isLocked; // Toggle stato
+            lockBtn.material.color.set(isLocked ? 0x00ff00 : 0xff0000); // Verde = Bloccato
+            console.log("Stato Lock:", isLocked);
+          }
+        }
+
+        // 2. Controllo Grab Pannello
         const distToPanel = indexTip.position.distanceTo(panel.position);
         if (distToPanel < 0.25 || activeGrab) {
           activeGrab = true;
           panel.position.copy(indexTip.position);
-          panel.quaternion.copy(indexTip.quaternion);
+          // Rimosso copy(quaternion) per evitare l'effetto profilo
         }
       } else {
         activeGrab = false;
       }
+      controllerObj.lastPinch = isPinching;
     }
 
-    // --- LOOP DI RENDERING ---
     renderer.setAnimationLoop(() => {
-      
-      // LOGICA FOLLOW-FACE: Se non lo stai afferrando, seguimi
-      if (!activeGrab) {
-        // Crea un punto 40cm davanti alla camera (il visore)
+      // 1. Logica di orientamento verso l'utente (Billboarding)
+      // Il pannello ti guarda sempre, anche quando lo sposti
+      panel.lookAt(camera.position);
+
+      // 2. Logica Follow-Face (se non è bloccato e non è in mano)
+      if (!isLocked && !activeGrab) {
         const distance = 0.45; 
         const targetPos = new THREE.Vector3(0, 0, -distance);
         targetPos.applyMatrix4(camera.matrixWorld);
-
-        // Copia posizione e rotazione della faccia (HUD mode)
-        panel.position.lerp(targetPos, 0.1); // 0.1 per un movimento fluido, usa 1.0 per istantaneo
-        panel.quaternion.slerp(camera.quaternion, 0.1);
+        panel.position.lerp(targetPos, 0.1);
       }
 
       handleInteraction(controllers.left);
