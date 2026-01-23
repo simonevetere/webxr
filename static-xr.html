@@ -205,7 +205,7 @@
       // 4. Nodo
       const node = new Node();
       node.addRenderPrimitive(renderer.createRenderPrimitive(primitive, material));
-      node.scale = [0.4, 0.25, 0.01]; // Piatto (Tablet)
+      node.scale = [0.4, 0.25, 0.001];
       
       return {
         node: node,
@@ -268,7 +268,7 @@
       // 2. Aggiungilo al sistema di interazione
       // Lo posizioniamo davanti agli occhi (z = -0.5) e un po' in alto (y = 1.3)
       // Usiamo una scala di 1.0 perché abbiamo già scalato la forma dentro createTablet
-      addInteractable(myTabletData.node, [0, 0, 0], 0.5);
+      addInteractable(myTabletData.node, [0, 1.3, -0.5], 0.5);
 
       // ESEMPIO: Come cambiare il testo dinamicamente dopo un po' di tempo
       setTimeout(() => {
@@ -278,7 +278,7 @@
       // ESEMPIO 2: Creare un secondo tablet più piccolo
       let infoTabletData = createTablet(renderer, "Info: usa due dita\nper afferrare.");
       // Lo aggiungiamo un po' a destra e lo facciamo più piccolo (scala 0.5)
-      addInteractable(infoTabletData.node, [0, 1, -0.6], 0.5);
+      addInteractable(infoTabletData.node, [0.4, 1.2, -0.6], 0.5);
 
       scene.setRenderer(renderer);
 
