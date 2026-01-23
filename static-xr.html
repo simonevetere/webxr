@@ -38,9 +38,10 @@
     import { BoxBuilder } from './js/render/geometry/box-builder.js';
     import { PbrMaterial } from './js/render/materials/pbr.js';
     import { QueryArgs } from './js/util/query-args.js';
-    import {mat4} from './js/render/math/gl-matrix.js';
-    import {vec3} from './js/render/math/gl-matrix.js';
+    import { mat4, vec3, quat } from './js/render/math/gl-matrix.js';
     import {Ray} from './js/render/math/ray.js';
+    import {Primitive, PrimitiveAttribute} from './js/render/core/primitive.js';
+    import {Material} from './js/render/core/material.js';
 
     // This library matches XRInputSource profiles to available controller models for us.
     import { fetchProfile } from 'https://cdn.jsdelivr.net/npm/@webxr-input-profiles/motion-controllers@1.0/dist/motion-controllers.module.js';
@@ -54,7 +55,7 @@
     let isAR = true;
     let radii = new Float32Array(25);
     let positions = new Float32Array(16*25);
-    
+    let tablettext = "SISTEMA OK"
     // Boxes
     let boxes_left = [];
     let boxes_right = [];
@@ -171,52 +172,141 @@
       return navigator.xr.requestSession(isAR?'immersive-ar':'immersive-vr', { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking'] }).then(onSessionStarted);
     }// --- FUNZIONI PER IL TABLET E IL TESTO ---
 
-    function createTablet(text) {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      canvas.width = 512;
-      canvas.height = 256;
+// Materiale originale per lo sfondo (Stile StatsViewer)
+class StatsMaterial extends Material {
+  get materialName() { return 'STATS_VIEWER'; }
+  get vertexSource() {
+    return `
+    in vec3 POSITION;
+    in vec3 COLOR_0;
+    out vec4 vColor;
+    vec4 vertex_main(mat4 proj, mat4 view, mat4 model) {
+      vColor = vec4(COLOR_0, 1.0);
+      return proj * view * model * vec4(POSITION, 1.0);
+    }`;
+  }
+  get fragmentSource() {
+    return `
+    precision mediump float;
+    in vec4 vColor;
+    vec4 fragment_main() { return vColor; }`;
+  }
+}
 
-      // 1. Disegno 2D
-      ctx.fillStyle = '#333'; ctx.fillRect(0, 0, 512, 256); // Cornice
-      ctx.fillStyle = '#fff'; ctx.fillRect(10, 10, 492, 236); // Schermo
-      ctx.fillStyle = '#000'; ctx.font = 'bold 40px Arial'; ctx.textAlign = 'center';
-      ctx.fillText(text, 256, 140);
+// Materiale per il layer del testo (Unlit con trasparenza)
+class TabletTextMaterial extends Material {
+  constructor() {
+    super();
+    this.baseColorTexture = { texture: { texture: null } };
+  }
+  get materialName() { return 'TABLET_TEXT_MATERIAL'; }
+  get vertexSource() {
+    return `
+    in vec3 POSITION;
+    in vec2 TEXCOORD_0;
+    out vec2 vTexCoord;
+    vec4 vertex_main(mat4 proj, mat4 view, mat4 model) {
+      vTexCoord = TEXCOORD_0;
+      return proj * view * model * vec4(POSITION, 1.0);
+    }`;
+  }
+  get fragmentSource() {
+    return `
+    precision mediump float;
+    uniform sampler2D baseColorTexture;
+    in vec2 vTexCoord;
+    vec4 fragment_main() {
+      vec4 color = texture(baseColorTexture, vTexCoord);
+      if (color.a < 0.1) discard; // Rende lo sfondo del testo trasparente
+      return color;
+    }`;
+  }
+}
 
-      // 2. Texture WebGL (Manuale su contesto gl)
-      const glTexture = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, glTexture);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+// Funzione originale per creare i rettangoli dello sfondo
+function addBGSquare(verts, indices, left, bottom, right, top, z, r, g, b) {
+  let idx = verts.length / 6;
+  verts.push(left, bottom, z, r, g, b);
+  verts.push(right, top, z, r, g, b);
+  verts.push(left, top, z, r, g, b);
+  verts.push(right, bottom, z, r, g, b);
+  indices.push(idx, idx+1, idx+2, idx, idx+3, idx+1);
+}
 
-      // 3. Geometria e Materiale
-      const boxBuilder = new BoxBuilder();
-      boxBuilder.pushCube([0, 0, 0], 1);
-      const primitive = boxBuilder.finishPrimitive(renderer);
-      
-      const material = new PbrMaterial();
-      // Fix: inizializzazione esplicita dell'oggetto texture
-      material.baseColorTexture = { texture: { texture: glTexture } };
-      material.emissiveFactor.value = [0.5, 0.5, 0.5];
+// 2. Classe Tablet definitiva
+export class Tablet extends Node {
+  constructor(renderer, initialText) {
+    super();
+    this._renderer = renderer;
+    this._gl = renderer.gl;
 
-      // 4. Nodo
-      const node = new Node();
-      node.addRenderPrimitive(renderer.createRenderPrimitive(primitive, material));
-      node.scale = [0.4, 0.25, 0.001];
-      
-      return {
-        node: node,
-        update: (newText) => {
-          ctx.fillStyle = '#fff'; ctx.fillRect(10, 10, 492, 236);
-          ctx.fillStyle = '#000'; ctx.fillText(newText, 256, 140);
-          gl.bindTexture(gl.TEXTURE_2D, glTexture);
-          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
-        }
-      };
-    }
+    // --- PARTE 1: SFONDO (1:1 STATS STYLE) ---
+    let verts = [];
+    let indices = [];
+    // Sfondo nero (Z=0)
+    addBGSquare(verts, indices, -0.5, -0.5, 0.5, 0.5, 0.0, 0.0, 0.0, 0.125);
+    // Pannello blu (Z=0.01)
+    addBGSquare(verts, indices, -0.45, -0.45, 0.45, 0.45, 0.01, 0.0, 0.0, 0.4);
+
+    let vBuf = renderer.createRenderBuffer(this._gl.ARRAY_BUFFER, new Float32Array(verts));
+    let iBuf = renderer.createRenderBuffer(this._gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices));
+    let bgAttribs = [
+      new PrimitiveAttribute('POSITION', vBuf, 3, this._gl.FLOAT, 24, 0),
+      new PrimitiveAttribute('COLOR_0', vBuf, 3, this._gl.FLOAT, 24, 12),
+    ];
+    let bgPrimitive = new Primitive(bgAttribs, indices.length);
+    bgPrimitive.setIndexBuffer(iBuf);
+    this.addRenderPrimitive(renderer.createRenderPrimitive(bgPrimitive, new StatsMaterial()));
+
+    // --- PARTE 2: TESTO (TEXTURE LAYER) ---
+    this._canvas = document.createElement('canvas');
+    this._canvas.width = 512;
+    this._canvas.height = 256;
+    this._ctx = this._canvas.getContext('2d');
+    this._texture = this._gl.createTexture();
+    this._gl.bindTexture(this._gl.TEXTURE_2D, this._texture);
+    this._gl.pixelStorei(this._gl.UNPACK_FLIP_Y_WEBGL, true);
+
+    // Geometria per il testo (Z=0.02 per stare sopra il blu)
+    const tVerts = new Float32Array([
+      -0.4,  0.2, 0.02,  0, 1, 
+       0.4,  0.2, 0.02,  1, 1, 
+      -0.4, -0.2, 0.02,  0, 0, 
+       0.4, -0.2, 0.02,  1, 0  
+    ]);
+    const tIndices = new Uint16Array([0, 2, 1, 1, 2, 3]);
+    let tvBuf = renderer.createRenderBuffer(this._gl.ARRAY_BUFFER, tVerts);
+    let tiBuf = renderer.createRenderBuffer(this._gl.ELEMENT_ARRAY_BUFFER, tIndices);
+    let tAttribs = [
+      new PrimitiveAttribute('POSITION', tvBuf, 3, this._gl.FLOAT, 20, 0),
+      new PrimitiveAttribute('TEXCOORD_0', tvBuf, 2, this._gl.FLOAT, 20, 12)
+    ];
+    let tPrimitive = new Primitive(tAttribs, tIndices.length);
+    tPrimitive.setIndexBuffer(tiBuf);
+
+    this._textMaterial = new TabletTextMaterial();
+    this._textMaterial.baseColorTexture.texture.texture = this._texture;
+    this.addRenderPrimitive(renderer.createRenderPrimitive(tPrimitive, this._textMaterial));
+
+    this.updateText(initialText);
+  }
+
+  updateText(newText) {
+    // Pulizia (trasparente)
+    this._ctx.clearRect(0, 0, 512, 256);
+    // Scritta Verde (stile hacker/stats)
+    this._ctx.fillStyle = '#00FF00';
+    this._ctx.font = 'bold 50px Courier New';
+    this._ctx.textAlign = 'center';
+    this._ctx.textBaseline = 'middle';
+    this._ctx.fillText(newText || "", 256, 128);
+
+    this._gl.bindTexture(this._gl.TEXTURE_2D, this._texture);
+    this._gl.texImage2D(this._gl.TEXTURE_2D, 0, this._gl.RGBA, this._gl.RGBA, this._gl.UNSIGNED_BYTE, this._canvas);
+    this._gl.texParameteri(this._gl.TEXTURE_2D, this._gl.TEXTURE_MAG_FILTER, this._gl.LINEAR);
+    this._gl.texParameteri(this._gl.TEXTURE_2D, this._gl.TEXTURE_MIN_FILTER, this._gl.LINEAR);
+  }
+}
 
     // Called when we've successfully acquired a XRSession. In response we
     // will set up the necessary session state and kick off the frame loop.
@@ -262,23 +352,11 @@
 
       initHands();
 
-      // 1. Crea il tablet con un testo iniziale
-      let myTabletData = createTablet(renderer, "Benvenuto in VR!\nAfferrami.");
+      // 1. Crea il tablet stabile
+      let mioTablet = new Tablet(renderer, "SISTEMA OK");
 
-      // 2. Aggiungilo al sistema di interazione
-      // Lo posizioniamo davanti agli occhi (z = -0.5) e un po' in alto (y = 1.3)
-      // Usiamo una scala di 1.0 perché abbiamo già scalato la forma dentro createTablet
-      addInteractable(myTabletData.node, [0, 1.3, -0.5], 0.5);
-
-      // ESEMPIO: Come cambiare il testo dinamicamente dopo un po' di tempo
-      setTimeout(() => {
-          myTabletData.update("Testo Aggiornato!\nFunziona.");
-      }, 5000); // Dopo 5 secondi cambia il testo
-
-      // ESEMPIO 2: Creare un secondo tablet più piccolo
-      let infoTabletData = createTablet(renderer, "Info: usa due dita\nper afferrare.");
-      // Lo aggiungiamo un po' a destra e lo facciamo più piccolo (scala 0.5)
-      addInteractable(infoTabletData.node, [0.4, 1.2, -0.6], 0.5);
+      // 2. Rendilo interagibile (Passa direttamente mioTablet)
+      addInteractable(mioTablet, [0, -0.3, -0.5], 0.3);
 
       scene.setRenderer(renderer);
 
@@ -477,65 +555,138 @@
       }
     }
 
-    function UpdateInteractables(time, frame, refSpace) {
-      if (!frame || !refSpace) return;
-      let session = frame.session;
+    function getTabletTouchCoords(fingerPos, tabletNode) {
+      // 1. Otteniamo la matrice del mondo del tablet
+      let tabletMatrix = tabletNode.matrix;
+      
+      // 2. Creiamo una matrice inversa
+      let inverseTabletMatrix = mat4.create();
+      mat4.invert(inverseTabletMatrix, tabletMatrix);
+      
+      // 3. Trasformiamo la posizione del dito nello spazio locale del tablet
+      let localPos = vec3.create();
+      vec3.transformMat4(localPos, fingerPos, inverseTabletMatrix);
+      
+      // 4. Verifica dei confini (il nostro piano va da -0.5 a 0.5)
+      // localPos[2] è la distanza dalla superficie (Z). 
+      // Se è vicina a 0 (es. < 0.02), allora sta toccando.
+      if (Math.abs(localPos[2]) < 0.05 && 
+          localPos[0] >= -0.5 && localPos[0] <= 0.5 && 
+          localPos[1] >= -0.5 && localPos[1] <= 0.5) {
+        
+        // 5. Convertiamo da coordinate locali (-0.5 a 0.5) a pixel (0-512, 0-256)
+        let canvasX = (localPos[0] + 0.5) * 512;
+        let canvasY = (0.5 - localPos[1]) * 256; // Y invertita perché il canvas va dall'alto in basso
+        
+        return { x: canvasX, y: canvasY };
+      }
+      
+      return null; // Non sta toccando
+    }
 
-      for (let inputSource of session.inputSources) {
-        if (!inputSource.hand) continue;
+function UpdateInteractables(time, frame, refSpace) {
+  if (!frame || !refSpace) return;
+  let session = frame.session;
+  let pose = frame.getViewerPose(refSpace);
+  
+  // 1. Loop principale sulle mani
+  for (let inputSource of session.inputSources) {
+    if (!inputSource.hand) continue;
 
-        let handType = inputSource.handedness; // "left" o "right"
-        let thumbPose = frame.getJointPose(inputSource.hand.get('thumb-tip'), refSpace);
-        let indexPose = frame.getJointPose(inputSource.hand.get('index-finger-tip'), refSpace);
+    let handType = inputSource.handedness;
+    let thumbPose = frame.getJointPose(inputSource.hand.get('thumb-tip'), refSpace);
+    let indexPose = frame.getJointPose(inputSource.hand.get('index-finger-tip'), refSpace);
 
-        if (thumbPose && indexPose) {
-          // Calcola posizione media tra le dita (punto di pinch)
-          let pinchPos = [
-            (thumbPose.transform.position.x + indexPose.transform.position.x) / 2,
-            (thumbPose.transform.position.y + indexPose.transform.position.y) / 2,
-            (thumbPose.transform.position.z + indexPose.transform.position.z) / 2
-          ];
+    if (thumbPose && indexPose) {
+      // Posizioni grezze per i calcoli
+      const thumbPos = [thumbPose.transform.position.x, thumbPose.transform.position.y, thumbPose.transform.position.z];
+      const indexPos = [indexPose.transform.position.x, indexPose.transform.position.y, indexPose.transform.position.z];
 
-          // Calcola distanza pinch (pizzico)
-          let dx = thumbPose.transform.position.x - indexPose.transform.position.x;
-          let dy = thumbPose.transform.position.y - indexPose.transform.position.y;
-          let dz = thumbPose.transform.position.z - indexPose.transform.position.z;
-          let isPinching = Math.sqrt(dx*dx + dy*dy + dz*dz) < 0.03;
+      // Punto medio tra le dita (dove avviene la presa)
+      let pinchPos = [
+        (thumbPos[0] + indexPos[0]) / 2,
+        (thumbPos[1] + indexPos[1]) / 2,
+        (thumbPos[2] + indexPos[2]) / 2
+      ];
 
-          if (isPinching) {
-            // Se la mano è già occupata, sposta l'oggetto
-            if (grabbedObjects[handType]) {
-              let obj = grabbedObjects[handType];
-              obj.node.translation = pinchPos;
-              mat4.fromRotationTranslationScale(obj.node.matrix, [0,0,0,1], pinchPos, obj.node.scale);
-            } else {
-              // Altrimenti, cerca l'oggetto più vicino da afferrare
-              for (let obj of interactables) {
-                let ox = pinchPos[0] - obj.node.translation[0];
-                let oy = pinchPos[1] - obj.node.translation[1];
-                let oz = pinchPos[2] - obj.node.translation[2];
-                let dist = Math.sqrt(ox*ox + oy*oy + oz*oz);
+      // Calcola distanza per il Pinch (Pizzico)
+      let dx = thumbPos[0] - indexPos[0];
+      let dy = thumbPos[1] - indexPos[1];
+      let dz = thumbPos[2] - indexPos[2];
+      let isPinching = Math.sqrt(dx*dx + dy*dy + dz*dz) < 0.03;
 
-                if (dist < obj.radius) {
-                  grabbedObjects[handType] = obj;
-                  obj.isGrabbed = true;
-                  obj.grabbingHand = handType;
-                  break; 
-                }
-              }
+      // --- LOGICA 1: Orientamento e Testo Tablet ---
+      if (pose) {
+        let q = pose.transform.orientation;
+
+        // 1. Usiamo q.x, q.y, q.z, q.w invece degli indici [0,1,2,3]
+        let pitch = Math.asin(Math.max(-1, Math.min(1, 2 * (q.w * q.x - q.y * q.z))));
+        let yaw = Math.atan2(2 * (q.w * q.y + q.z * q.x), 1 - 2 * (q.x * q.x + q.y * q.y));
+        
+        // Conversione in gradi
+        let pDeg = Math.round(pitch * (180 / Math.PI));
+        let yDeg = Math.round(yaw * (180 / Math.PI));
+
+        // 2. Ciclo aggiornamento Tablet
+        for (let obj of interactables) {
+          if (obj.node && obj.node.constructor.name === "Tablet") {
+            
+            // Allineamento rotazione (usa quat.copy se vuoi che ti segua)
+            quat.fromEuler(obj.node.rotation, pDeg, yDeg, 0);
+
+            // Testo di debug
+            tablettext = `${q}° |${yDeg}°`;
+
+            // Rilevamento Coordinate Touch
+            let touch = getTabletTouchCoords(indexPos, obj.node);
+            if (touch) {
+              tablettext = `TOUCH -> X: ${Math.round(touch.x)} Y: ${Math.round(touch.y)}`;
             }
-          } else {
-            // Se non sta più pizzicando, rilascia l'oggetto
-            if (grabbedObjects[handType]) {
-              let obj = grabbedObjects[handType];
-              obj.isGrabbed = false;
-              obj.grabbingHand = null;
-              grabbedObjects[handType] = null;
-            }
+            
+            obj.node.updateText(tablettext);
           }
         }
       }
+
+      // --- LOGICA 2: Spostamento (Grab) ---
+      if (isPinching) {
+        if (grabbedObjects[handType]) {
+          let obj = grabbedObjects[handType];
+          // Sposta l'oggetto seguendo il pinchPos
+          obj.node.translation = pinchPos;
+          
+          // Se l'oggetto è il tablet, usiamo solo translation per non resettare la scala custom
+          if (obj.node.constructor.name !== "Tablet") {
+             mat4.fromRotationTranslationScale(obj.node.matrix, [0,0,0,1], pinchPos, obj.node.scale);
+          }
+        } else {
+          // Cerca l'oggetto più vicino da afferrare
+          for (let obj of interactables) {
+            let ox = pinchPos[0] - obj.node.translation[0];
+            let oy = pinchPos[1] - obj.node.translation[1];
+            let oz = pinchPos[2] - obj.node.translation[2];
+            let dist = Math.sqrt(ox*ox + oy*oy + oz*oz);
+
+            if (dist < obj.radius) {
+              grabbedObjects[handType] = obj;
+              obj.isGrabbed = true;
+              obj.grabbingHand = handType;
+              break; 
+            }
+          }
+        }
+      } else {
+        // Rilascio dell'oggetto
+        if (grabbedObjects[handType]) {
+          let obj = grabbedObjects[handType];
+          obj.isGrabbed = false;
+          obj.grabbingHand = null;
+          grabbedObjects[handType] = null;
+        }
+      }
     }
+  }
+}
 
     // Called every time the XRSession requests that a new frame be drawn.
     function onXRFrame(t, frame) {
