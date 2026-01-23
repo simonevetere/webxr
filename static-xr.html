@@ -42,6 +42,7 @@
     import {Ray} from './js/render/math/ray.js';
     import {Primitive, PrimitiveAttribute} from './js/render/core/primitive.js';
     import {Material} from './js/render/core/material.js';
+    import {Viewer} from './js/render/nodes/viewer.js';
 
     // This library matches XRInputSource profiles to available controller models for us.
     import { fetchProfile } from 'https://cdn.jsdelivr.net/npm/@webxr-input-profiles/motion-controllers@1.0/dist/motion-controllers.module.js';
@@ -81,6 +82,7 @@
     scene.enableStats(false);
     
     let sunflower = new Gltf2Node({url: 'media/gltf/sunflower/sunflower.gltf'});
+    let mioTestoInScena = null;
 
     function createBoxPrimitive(r, g, b) {  
       let boxBuilder = new BoxBuilder();  
@@ -172,142 +174,6 @@
       return navigator.xr.requestSession(isAR?'immersive-ar':'immersive-vr', { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking'] }).then(onSessionStarted);
     }// --- FUNZIONI PER IL TABLET E IL TESTO ---
 
-// Materiale originale per lo sfondo (Stile StatsViewer)
-class StatsMaterial extends Material {
-  get materialName() { return 'STATS_VIEWER'; }
-  get vertexSource() {
-    return `
-    in vec3 POSITION;
-    in vec3 COLOR_0;
-    out vec4 vColor;
-    vec4 vertex_main(mat4 proj, mat4 view, mat4 model) {
-      vColor = vec4(COLOR_0, 1.0);
-      return proj * view * model * vec4(POSITION, 1.0);
-    }`;
-  }
-  get fragmentSource() {
-    return `
-    precision mediump float;
-    in vec4 vColor;
-    vec4 fragment_main() { return vColor; }`;
-  }
-}
-
-// Materiale per il layer del testo (Unlit con trasparenza)
-class TabletTextMaterial extends Material {
-  constructor() {
-    super();
-    this.baseColorTexture = { texture: { texture: null } };
-  }
-  get materialName() { return 'TABLET_TEXT_MATERIAL'; }
-  get vertexSource() {
-    return `
-    in vec3 POSITION;
-    in vec2 TEXCOORD_0;
-    out vec2 vTexCoord;
-    vec4 vertex_main(mat4 proj, mat4 view, mat4 model) {
-      vTexCoord = TEXCOORD_0;
-      return proj * view * model * vec4(POSITION, 1.0);
-    }`;
-  }
-  get fragmentSource() {
-    return `
-    precision mediump float;
-    uniform sampler2D baseColorTexture;
-    in vec2 vTexCoord;
-    vec4 fragment_main() {
-      vec4 color = texture(baseColorTexture, vTexCoord);
-      if (color.a < 0.1) discard; // Rende lo sfondo del testo trasparente
-      return color;
-    }`;
-  }
-}
-
-// Funzione originale per creare i rettangoli dello sfondo
-function addBGSquare(verts, indices, left, bottom, right, top, z, r, g, b) {
-  let idx = verts.length / 6;
-  verts.push(left, bottom, z, r, g, b);
-  verts.push(right, top, z, r, g, b);
-  verts.push(left, top, z, r, g, b);
-  verts.push(right, bottom, z, r, g, b);
-  indices.push(idx, idx+1, idx+2, idx, idx+3, idx+1);
-}
-
-// 2. Classe Tablet definitiva
-export class Tablet extends Node {
-  constructor(renderer, initialText) {
-    super();
-    this._renderer = renderer;
-    this._gl = renderer.gl;
-
-    // --- PARTE 1: SFONDO (1:1 STATS STYLE) ---
-    let verts = [];
-    let indices = [];
-    // Sfondo nero (Z=0)
-    addBGSquare(verts, indices, -0.5, -0.5, 0.5, 0.5, 0.0, 0.0, 0.0, 0.125);
-    // Pannello blu (Z=0.01)
-    addBGSquare(verts, indices, -0.45, -0.45, 0.45, 0.45, 0.01, 0.0, 0.0, 0.4);
-
-    let vBuf = renderer.createRenderBuffer(this._gl.ARRAY_BUFFER, new Float32Array(verts));
-    let iBuf = renderer.createRenderBuffer(this._gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices));
-    let bgAttribs = [
-      new PrimitiveAttribute('POSITION', vBuf, 3, this._gl.FLOAT, 24, 0),
-      new PrimitiveAttribute('COLOR_0', vBuf, 3, this._gl.FLOAT, 24, 12),
-    ];
-    let bgPrimitive = new Primitive(bgAttribs, indices.length);
-    bgPrimitive.setIndexBuffer(iBuf);
-    this.addRenderPrimitive(renderer.createRenderPrimitive(bgPrimitive, new StatsMaterial()));
-
-    // --- PARTE 2: TESTO (TEXTURE LAYER) ---
-    this._canvas = document.createElement('canvas');
-    this._canvas.width = 512;
-    this._canvas.height = 256;
-    this._ctx = this._canvas.getContext('2d');
-    this._texture = this._gl.createTexture();
-    this._gl.bindTexture(this._gl.TEXTURE_2D, this._texture);
-    this._gl.pixelStorei(this._gl.UNPACK_FLIP_Y_WEBGL, true);
-
-    // Geometria per il testo (Z=0.02 per stare sopra il blu)
-    const tVerts = new Float32Array([
-      -0.4,  0.2, 0.02,  0, 1, 
-       0.4,  0.2, 0.02,  1, 1, 
-      -0.4, -0.2, 0.02,  0, 0, 
-       0.4, -0.2, 0.02,  1, 0  
-    ]);
-    const tIndices = new Uint16Array([0, 2, 1, 1, 2, 3]);
-    let tvBuf = renderer.createRenderBuffer(this._gl.ARRAY_BUFFER, tVerts);
-    let tiBuf = renderer.createRenderBuffer(this._gl.ELEMENT_ARRAY_BUFFER, tIndices);
-    let tAttribs = [
-      new PrimitiveAttribute('POSITION', tvBuf, 3, this._gl.FLOAT, 20, 0),
-      new PrimitiveAttribute('TEXCOORD_0', tvBuf, 2, this._gl.FLOAT, 20, 12)
-    ];
-    let tPrimitive = new Primitive(tAttribs, tIndices.length);
-    tPrimitive.setIndexBuffer(tiBuf);
-
-    this._textMaterial = new TabletTextMaterial();
-    this._textMaterial.baseColorTexture.texture.texture = this._texture;
-    this.addRenderPrimitive(renderer.createRenderPrimitive(tPrimitive, this._textMaterial));
-
-    this.updateText(initialText);
-  }
-
-  updateText(newText) {
-    // Pulizia (trasparente)
-    this._ctx.clearRect(0, 0, 512, 256);
-    // Scritta Verde (stile hacker/stats)
-    this._ctx.fillStyle = '#00FF00';
-    this._ctx.font = 'bold 50px Courier New';
-    this._ctx.textAlign = 'center';
-    this._ctx.textBaseline = 'middle';
-    this._ctx.fillText(newText || "", 256, 128);
-
-    this._gl.bindTexture(this._gl.TEXTURE_2D, this._texture);
-    this._gl.texImage2D(this._gl.TEXTURE_2D, 0, this._gl.RGBA, this._gl.RGBA, this._gl.UNSIGNED_BYTE, this._canvas);
-    this._gl.texParameteri(this._gl.TEXTURE_2D, this._gl.TEXTURE_MAG_FILTER, this._gl.LINEAR);
-    this._gl.texParameteri(this._gl.TEXTURE_2D, this._gl.TEXTURE_MIN_FILTER, this._gl.LINEAR);
-  }
-}
-
     // Called when we've successfully acquired a XRSession. In response we
     // will set up the necessary session state and kick off the frame loop.
     function onSessionStarted(session) {
@@ -352,11 +218,11 @@ export class Tablet extends Node {
 
       initHands();
 
-      // 1. Crea il tablet stabile
-      let mioTablet = new Tablet(renderer, "SISTEMA OK");
+      let viewer = new Viewer();
 
-      // 2. Rendilo interagibile (Passa direttamente mioTablet)
-      addInteractable(mioTablet, [0, -0.3, -0.5], 0.3);
+      addInteractable(viewer, [0, -0.3, -0.5], 0.5);
+
+      viewer.text = "DIOCANE";
 
       scene.setRenderer(renderer);
 
@@ -629,13 +495,10 @@ function UpdateInteractables(time, frame, refSpace) {
 
         // 2. Ciclo aggiornamento Tablet
         for (let obj of interactables) {
-          if (obj.node && obj.node.constructor.name === "Tablet") {
+          if (obj.node && obj.node.constructor.name === "Viewer") {
             
             // Allineamento rotazione (usa quat.copy se vuoi che ti segua)
             quat.fromEuler(obj.node.rotation, pDeg, yDeg, 0);
-
-            // Testo di debug
-            tablettext = `${q}° |${yDeg}°`;
 
             // Rilevamento Coordinate Touch
             let touch = getTabletTouchCoords(indexPos, obj.node);
@@ -643,7 +506,7 @@ function UpdateInteractables(time, frame, refSpace) {
               tablettext = `TOUCH -> X: ${Math.round(touch.x)} Y: ${Math.round(touch.y)}`;
             }
             
-            obj.node.updateText(tablettext);
+             obj.node.text = tablettext;
           }
         }
       }
@@ -705,7 +568,6 @@ function UpdateInteractables(time, frame, refSpace) {
       // Get the XRDevice pose relative to the Frame of Reference we created
       // earlier.
       let pose = frame.getViewerPose(xrRefSpace);
-
       // Getting the pose may fail if, for example, tracking is lost. So we
       // have to check to make sure that we got a valid pose before attempting
       // to render with it. If not in this case we'll just leave the
@@ -726,18 +588,11 @@ function UpdateInteractables(time, frame, refSpace) {
         // into the corresponding viewport.
         for (let view of pose.views) {
           let viewport = glLayer.getViewport(view);
-          gl.viewport(viewport.x, viewport.y,
-            viewport.width, viewport.height);
+          gl.viewport(viewport.x, viewport.y, viewport.width, viewport.height);
 
-          // Draw this view of the scene. What happens in this function really
-          // isn't all that important. What is important is that it renders
-          // into the XRWebGLLayer's framebuffer, using the viewport into that
-          // framebuffer reported by the current view, and using the
-          // projection matrix and view transform from the current view.
-          // We bound the framebuffer and viewport up above, and are passing
-          // in the appropriate matrices here to be used when rendering.
           scene.draw(view.projectionMatrix, view.transform);
         }
+
       } else {
         // There's several options for handling cases where no pose is given.
         // The simplest, which these samples opt for, is to simply not draw
