@@ -24,108 +24,142 @@
   </header>
 
   <script type="module">
-    import * as THREE from 'three';
-    import { ARButton } from 'three/addons/webxr/ARButton.js';
-    import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
+import * as THREE from 'three';
+import { ARButton } from 'three/addons/webxr/ARButton.js';
+import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
 
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.xr.enabled = true;
-    document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.xr.enabled = true;
+document.body.appendChild(renderer.domElement);
 
-    document.body.appendChild(ARButton.createButton(renderer, { 
-      optionalFeatures: ['hand-tracking'] 
-    }));
+document.body.appendChild(ARButton.createButton(renderer, { 
+  optionalFeatures: ['hand-tracking'] 
+}));
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1));
+scene.add(new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1));
 
-    // --- IL PANNELLO (1620x1080) ---
-    const textureLoader = new THREE.TextureLoader();
-    const myTexture = textureLoader.load('./media/textures/rect-mono.png');
-    const panel = new THREE.Mesh(
-      new THREE.BoxGeometry(0.45, 0.30, 0.01),
-      new THREE.MeshBasicMaterial({ map: myTexture })
-    );
-    scene.add(panel);
+// --- STATO GLOBALE ---
+let isLocked = false;
 
-    // --- IL TASTO LOCK (Sferetta nell'angolo) ---
-    const lockBtn = new THREE.Mesh(
-      new THREE.SphereGeometry(0.03),
-      new THREE.MeshBasicMaterial({ color: 0xff0000 })
-    );
-    // Posizionata nell'angolo in alto a destra del pannello
-    lockBtn.position.set(0.22, 0.15, 0.02);
-    panel.add(lockBtn); // Figlia del pannello, lo segue sempre
+// --- CREAZIONE PANNELLO (DINAMICO) ---
+// --- 1. IL PANNELLO (Contenuto passivo) ---
+const textureLoader = new THREE.TextureLoader();
+const myTexture = textureLoader.load('./texture/image/polipo.png');
 
-    // --- STATO ---
-    let isLocked = false;
-    let activeGrab = null;
-    const handModels = new XRHandModelFactory();
-    const controllers = {
-      left: { hand: renderer.xr.getHand(0), grabbed: null, lastPinch: false },
-      right: { hand: renderer.xr.getHand(1), grabbed: null, lastPinch: false }
-    };
+const panel = new THREE.Mesh(
+  new THREE.BoxGeometry(0.45, 0.30, 0.01),
+  new THREE.MeshBasicMaterial({ map: myTexture })
+);
 
-    [controllers.left, controllers.right].forEach(c => {
-      c.hand.add(handModels.createHandModel(c.hand, 'mesh'));
-      scene.add(c.hand);
-    });
+// IMPORTANTE: Togliamo draggable dal panel, non vogliamo muoverlo toccando il quadro
+panel.userData.draggable = false; 
+scene.add(panel);
 
-    function handleInteraction(controllerObj) {
-      const hand = controllerObj.hand;
-      const indexTip = hand.joints['index-finger-tip'];
-      const thumbTip = hand.joints['thumb-tip'];
+// --- 2. LA PALLINA (Ancora di controllo) ---
+const lockBtn = new THREE.Mesh(
+  new THREE.SphereGeometry(0.03),
+  new THREE.MeshBasicMaterial({ color: 0xff0000 })
+);
 
-      if (!indexTip || !thumbTip || !indexTip.position) return;
+// Posizionamento
+lockBtn.position.set(0.22, 0.15, 0.02);
 
-      const distPinch = indexTip.position.distanceTo(thumbTip.position);
-      const isPinching = distPinch < 0.035;
+// CONFIGURAZIONE DINAMICA
+lockBtn.userData.isActionButton = true; // Serve per il click (Lock)
+lockBtn.userData.isAnchor = true;       // Serve per dire "Io sono un'ancora"
+lockBtn.userData.controlledObject = panel; // <--- Legame: questa pallina muove il panel
 
-      if (isPinching) {
-        // 1. Controllo se sto toccando il tasto LOCK (solo al primo tocco)
-        if (!controllerObj.lastPinch) {
-          const distToLock = indexTip.position.distanceTo(lockBtn.getWorldPosition(new THREE.Vector3()));
-          if (distToLock < 0.06) {
-            isLocked = !isLocked; // Toggle stato
-            lockBtn.material.color.set(isLocked ? 0x00ff00 : 0xff0000); // Verde = Bloccato
-            console.log("Stato Lock:", isLocked);
+lockBtn.userData.onClick = () => {
+  isLocked = !isLocked;
+  lockBtn.material.color.set(isLocked ? 0x00ff00 : 0xff0000);
+};
+
+// La aggiungiamo al pannello così se il pannello si muove, lei resta nell'angolo
+panel.add(lockBtn);
+
+// --- GESTIONE CONTROLLER INDIPENDENTI ---
+const handModels = new XRHandModelFactory();
+const controllers = {
+  left: { hand: renderer.xr.getHand(0), grabbedObject: null, lastPinch: false },
+  right: { hand: renderer.xr.getHand(1), grabbedObject: null, lastPinch: false }
+};
+
+[controllers.left, controllers.right].forEach(c => {
+  c.hand.add(handModels.createHandModel(c.hand, 'mesh'));
+  scene.add(c.hand);
+});
+// --- 3. LOGICA DI INTERAZIONE AGGIORNATA ---
+function handleInteraction(controllerObj) {
+  const { hand } = controllerObj;
+  const indexTip = hand.joints['index-finger-tip'];
+  const thumbTip = hand.joints['thumb-tip'];
+
+  if (!indexTip || !thumbTip || !indexTip.position) return;
+
+  const isPinching = indexTip.position.distanceTo(thumbTip.position) < 0.035;
+
+  if (isPinching) {
+    if (!controllerObj.grabbedObject) {
+      // Controlliamo cosa abbiamo "pizzicato"
+      scene.traverse((obj) => {
+        const worldPos = new THREE.Vector3();
+        obj.getWorldPosition(worldPos);
+
+        if (indexTip.position.distanceTo(worldPos) < 0.07) {
+          // Se pizzichiamo l'ancora (la pallina)
+          if (obj.userData.isAnchor) {
+            controllerObj.grabbedObject = obj;
+          }
+          // Se è un bottone, eseguiamo l'azione una volta sola
+          if (obj.userData.isActionButton && !controllerObj.lastPinch) {
+            obj.userData.onClick();
           }
         }
-
-        // 2. Controllo Grab Pannello
-        const distToPanel = indexTip.position.distanceTo(panel.position);
-        if (distToPanel < 0.25 || activeGrab) {
-          activeGrab = true;
-          panel.position.copy(indexTip.position);
-          // Rimosso copy(quaternion) per evitare l'effetto profilo
-        }
-      } else {
-        activeGrab = false;
-      }
-      controllerObj.lastPinch = isPinching;
+      });
     }
 
-    renderer.setAnimationLoop(() => {
-      // 1. Logica di orientamento verso l'utente (Billboarding)
-      // Il pannello ti guarda sempre, anche quando lo sposti
-      panel.lookAt(camera.position);
+    // SE STIAMO TRASCINANDO L'ANCORA
+    if (controllerObj.grabbedObject) {
+      const anchor = controllerObj.grabbedObject;
+      const target = anchor.userData.controlledObject; // Il nostro panel
 
-      // 2. Logica Follow-Face (se non è bloccato e non è in mano)
-      if (!isLocked && !activeGrab) {
-        const distance = 0.45; 
-        const targetPos = new THREE.Vector3(0, 0, -distance);
-        targetPos.applyMatrix4(camera.matrixWorld);
-        panel.position.lerp(targetPos, 0.1);
+      if (target) {
+        // Calcoliamo la posizione globale dell'ancora rispetto al target
+        // per evitare che il pannello "salti" al centro della mano
+        const offset = new THREE.Vector3().copy(anchor.position);
+        offset.applyQuaternion(target.quaternion); 
+        
+        // Muoviamo il pannello in modo che l'ancora resti sotto le dita
+        target.position.subVectors(indexTip.position, offset);
       }
+    }
+  } else {
+    controllerObj.grabbedObject = null;
+  }
+  controllerObj.lastPinch = isPinching;
+}
 
-      handleInteraction(controllers.left);
-      handleInteraction(controllers.right);
-      
-      renderer.render(scene, camera);
-    });
+renderer.setAnimationLoop(() => {
+  panel.lookAt(camera.position);
+
+  const isBeingGrabbed = controllers.left.grabbedObject || controllers.right.grabbedObject;
+  
+  if (!isLocked && !isBeingGrabbed) {
+    const distance = 0.45; 
+    const targetPos = new THREE.Vector3(0, 0, -distance);
+    targetPos.applyMatrix4(camera.matrixWorld);
+    panel.position.lerp(targetPos, 0.1);
+  }
+
+  handleInteraction(controllers.left);
+  handleInteraction(controllers.right);
+  
+  renderer.render(scene, camera);
+});
   </script>
 </body>
 </html>
