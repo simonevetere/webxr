@@ -8,6 +8,7 @@ const icons = {
 };
 
 export function attachControls(panel, width, height) {
+    const zPos = (panel.geometry.parameters.depth / 2) + 0.001 || 0.011;
     const posYBottom = -(height / 2) + 0.05;
     const posXLeft = -0.06;
     const posXRight = 0.06;
@@ -22,7 +23,7 @@ export function attachControls(panel, width, height) {
     );
     anchorIcon.position.z = 0.001;
     anchorBg.add(anchorIcon);
-    anchorBg.position.set(posXLeft, posYBottom, 0.011);
+    anchorBg.position.set(posXLeft, posYBottom, zPos);
 
     anchorBg.userData = {
         isActionButton: true,
@@ -45,7 +46,7 @@ export function attachControls(panel, width, height) {
     );
     trashIcon.position.z = 0.001;
     trashBg.add(trashIcon);
-    trashBg.position.set(posXRight, posYBottom, 0.011);
+    trashBg.position.set(posXRight, posYBottom, zPos);
 
     trashBg.userData = {
         isActionButton: true,

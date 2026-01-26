@@ -22,7 +22,8 @@ export function create(params) {
 
     const menuItems = [
         { label: 'Sedia', type: 'sedia'},
-        { label: 'Mega Murena', type: 'megaMurena'}
+        { label: 'Mega Murena', type: 'megaMurena'},
+        { label: 'Mega cubo', type: 'cubo'}
     ];
 
     menuItems.forEach((item, index) => {
