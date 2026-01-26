@@ -14,35 +14,17 @@ const activeObjects = [];
 function removeObject(obj) {
     if (!obj) return;
 
+    obj.userData.isActionButton = false;
+    obj.userData.isAnchor = false;
     if (controllers.left.grabbedObject === obj) controllers.left.grabbedObject = null;
     if (controllers.right.grabbedObject === obj) controllers.right.grabbedObject = null;
 
     const index = activeObjects.indexOf(obj);
     if (index > -1) activeObjects.splice(index, 1);
 
-    obj.traverse((child) => {
-        if (child.isMesh) {
-            child.geometry.dispose();
-            if (child.material.isMaterial) {
-                cleanMaterial(child.material);
-            } else if (Array.isArray(child.material)) {
-                child.material.forEach(cleanMaterial);
-            }
-        }
-    });
-
     scene.remove(obj);
 
     saveToMemory();
-}
-
-function cleanMaterial(material) {
-    material.dispose(); // Svuota il materiale
-    for (const key of Object.keys(material)) {
-        if (material[key] && material[key].isTexture) {
-            material[key].dispose(); // Svuota la texture (SVG/PNG) dalla GPU
-        }
-    }
 }
 
 function saveToMemory() {
@@ -99,7 +81,9 @@ Object.values(controllers).forEach(c => {
 });
 
 renderer.setAnimationLoop(() => {
-    activeObjects.forEach(obj => {
+    const objectsToUpdate = activeObjects.filter(obj => obj && obj.parent);
+
+    objectsToUpdate.forEach(obj => {
         const isGrabbed = (controllers.left.grabbedObject === obj || 
                            controllers.right.grabbedObject === obj);
 
@@ -115,7 +99,6 @@ renderer.setAnimationLoop(() => {
 
     handleHover(controllers.left, scene);
     handleHover(controllers.right, scene);
-    
     handleInteraction(controllers.left, scene, saveToMemory);
     handleInteraction(controllers.right, scene, saveToMemory);
     

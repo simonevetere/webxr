@@ -12,6 +12,7 @@ export function create(params) {
 
     panel.userData = {
         type: 'murena',
+        isAnchor: true,
         params: params,
         isFollower: true,
         isBillboard: true

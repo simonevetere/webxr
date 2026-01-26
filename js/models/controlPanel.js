@@ -29,7 +29,7 @@ export function create(params) {
 
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
-        canvas.width = 256;  // Risoluzione canvas
+        canvas.width = 256;
         canvas.height = 64;
         
         ctx.fillStyle = '#eeeeee'; 
