@@ -90,17 +90,20 @@ renderer.setAnimationLoop(() => {
         if (obj.userData.isFollower && !obj.userData.isLocked && !isGrabbed) {
             const targetPos = new THREE.Vector3(0, 0, -0.45).applyMatrix4(camera.matrixWorld);
             obj.position.lerp(targetPos, 0.1);
-            
-            if (obj.userData.isBillboard) {
-                obj.lookAt(camera.position);
-            }
+        }
+
+        if (obj.userData.isBillboard) {
+            obj.lookAt(camera.position);
         }
     });
 
-    handleHover(controllers.left, scene);
-    handleHover(controllers.right, scene);
-    handleInteraction(controllers.left, scene, saveToMemory);
-    handleInteraction(controllers.right, scene, saveToMemory);
+    if (scene && typeof scene.traverse === 'function') {
+        handleHover(controllers.left, scene);
+        handleHover(controllers.right, scene);
+        
+        handleInteraction(controllers.left, scene, saveToMemory);
+        handleInteraction(controllers.right, scene, saveToMemory);
+    }
     
     renderer.render(scene, camera);
 });

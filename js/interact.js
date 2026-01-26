@@ -4,11 +4,14 @@ let lastSpawnTime = 0;
    
 export function handleInteraction(controllerObj, scene, onUpdate) {
     
-    if (!scene || !controllerObj || !controllerObj.hand) return;
+    if (!scene || typeof scene.traverse !== 'function' || !controllerObj || !controllerObj.hand) return;
     
     const { hand } = controllerObj;
+    if (!hand) return;
+
     const indexTip = hand.joints['index-finger-tip'];
     const thumbTip = hand.joints['thumb-tip'];
+
     const wrist = hand.joints['wrist'];
 
     if (!indexTip?.position || !thumbTip?.position || !wrist?.quaternion) return;
@@ -17,26 +20,28 @@ export function handleInteraction(controllerObj, scene, onUpdate) {
     const currentTime = Date.now();
 
     scene.traverse((obj) => {
-        if (!obj || !obj.parent || !obj.userData.isActionButton) return;
+        if (!obj || !obj.parent) return; 
 
-        const worldPos = new THREE.Vector3();
-        obj.getWorldPosition(worldPos);
-        const dist = indexTip.position.distanceTo(worldPos);
+        if (obj.userData.isActionButton) {
+            const worldPos = new THREE.Vector3();
+            obj.getWorldPosition(worldPos);
+            const dist = indexTip.position.distanceTo(worldPos);
 
-        if (dist < 0.025) {
-            if (!obj.userData.isBeingTouched && (currentTime - lastSpawnTime > 1000)) {
-                
-                console.log("Azione eseguita su:", obj.userData.label);
-                
-                if (obj.userData.onClick) {
-                    obj.userData.onClick();
-                    lastSpawnTime = currentTime;
+            if (dist < 0.025) {
+                if (!obj.userData.isBeingTouched && (currentTime - lastSpawnTime > 1000)) {
+                    
+                    console.log("Azione eseguita su:", obj.userData.label);
+                    
+                    if (obj.userData.onClick) {
+                        obj.userData.onClick();
+                        lastSpawnTime = currentTime;
+                    }
+                    
+                    obj.userData.isBeingTouched = true;
                 }
-                
-                obj.userData.isBeingTouched = true;
+            } else {
+                obj.userData.isBeingTouched = false;
             }
-        } else {
-            obj.userData.isBeingTouched = false;
         }
     });
 
