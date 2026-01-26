@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 
+let lastSpawnTime = 0;
+   
 export function handleInteraction(controllerObj, scene, onUpdate) {
+    
+    if (!scene || !controllerObj || !controllerObj.hand) return;
+    
     const { hand } = controllerObj;
     const indexTip = hand.joints['index-finger-tip'];
     const thumbTip = hand.joints['thumb-tip'];
@@ -9,35 +14,40 @@ export function handleInteraction(controllerObj, scene, onUpdate) {
     if (!indexTip?.position || !thumbTip?.position || !wrist?.quaternion) return;
 
     const isPinching = indexTip.position.distanceTo(thumbTip.position) < 0.035;
+    const currentTime = Date.now();
 
     scene.traverse((obj) => {
-        if (obj.userData.isActionButton) {
-            const worldPos = new THREE.Vector3();
-            obj.getWorldPosition(worldPos);
+        if (!obj || !obj.parent || !obj.userData.isActionButton) return;
 
-            const dist = indexTip.position.distanceTo(worldPos);
+        const worldPos = new THREE.Vector3();
+        obj.getWorldPosition(worldPos);
+        const dist = indexTip.position.distanceTo(worldPos);
 
-            if (dist < 0.025) {
-                if (!obj.userData.isBeingTouched) {
-                    console.log("Touch rilevato su:", obj.userData.label || 'button');
-                    obj.userData.onClick?.();
-                    obj.userData.isBeingTouched = true;
+        if (dist < 0.025) {
+            if (!obj.userData.isBeingTouched && (currentTime - lastSpawnTime > 1000)) {
+                
+                console.log("Azione eseguita su:", obj.userData.label);
+                
+                if (obj.userData.onClick) {
+                    obj.userData.onClick();
+                    lastSpawnTime = currentTime;
                 }
-            } else {
-                obj.userData.isBeingTouched = false;
+                
+                obj.userData.isBeingTouched = true;
             }
+        } else {
+            obj.userData.isBeingTouched = false;
         }
     });
 
     if (isPinching) {
         if (!controllerObj.grabbedObject) {
             scene.traverse((obj) => {
-                const worldPos = new THREE.Vector3();
-                obj.getWorldPosition(worldPos);
-                if (indexTip.position.distanceTo(worldPos) < 0.07) {
-                    if (obj.userData.isAnchor) controllerObj.grabbedObject = obj;
-                    if (obj.userData.isActionButton && !controllerObj.lastPinch) {
-                        obj.userData.onClick?.();
+                if (obj.userData.isAnchor) {
+                    const worldPos = new THREE.Vector3();
+                    obj.getWorldPosition(worldPos);
+                    if (indexTip.position.distanceTo(worldPos) < 0.07) {
+                        controllerObj.grabbedObject = obj;
                     }
                 }
             });
@@ -49,13 +59,12 @@ export function handleInteraction(controllerObj, scene, onUpdate) {
 
             if (target) {
                 target.position.copy(indexTip.position);
-
                 if (!target.userData.isBillboard) {
                     target.quaternion.copy(wrist.quaternion);
-                    target.rotateZ(Math.PI / 2); 
+                    target.rotateZ(Math.PI / 2);
                 }
-                
-                if (onUpdate) onUpdate();
+
+                if (onUpdate) onUpdate(); 
             }
         }
     } else {
@@ -70,13 +79,10 @@ export function handleHover(controllerObj, scene) {
     
     if (!indexTip || !indexTip.position) return;
 
-    // Creiamo un vettore per la posizione mondiale del dito
     const fingerPos = new THREE.Vector3();
     indexTip.getWorldPosition(fingerPos);
 
     scene.traverse((obj) => {
-        // Applichiamo l'effetto solo se è una Mesh ed è grabbabile 
-        // (controlliamo se l'oggetto o il suo genitore hanno l'ancora)
         if (obj.isMesh && (obj.userData.isAnchor || (obj.parent && obj.parent.userData.isAnchor))) {
             
             const objWorldPos = new THREE.Vector3();

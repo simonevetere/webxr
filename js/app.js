@@ -12,12 +12,17 @@ document.body.appendChild(ARButton.createButton(renderer, { optionalFeatures: ['
 const activeObjects = [];
 
 function removeObject(obj) {
-    scene.remove(obj);
+    if (!obj) return;
+
+    if (controllers.left.grabbedObject === obj) controllers.left.grabbedObject = null;
+    if (controllers.right.grabbedObject === obj) controllers.right.grabbedObject = null;
 
     const index = activeObjects.indexOf(obj);
     if (index > -1) {
         activeObjects.splice(index, 1);
     }
+
+    scene.remove(obj);
 
     saveToMemory();
 }
