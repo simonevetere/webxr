@@ -1,15 +1,18 @@
 import * as THREE from 'three';
-import { attachControls } from './buttonFactory.js';
+import { attachControls, createRoundedTexture, createArrow } from './factory.js';
 
 export function create(params) {
+    // 1. Configurazione Base
     const w = 0.45;
-    const h = 0.60; 
-    
-    const loader = new THREE.TextureLoader();
-    
+    const h = 0.60;
+    const itemsPerPage = 4;
+    let currentPage = 0;
+
+    // 2. Pannello Principale
+    const panelTexture = createRoundedTexture(w, h, 40, 'rgba(255,255,255,0.8)', 'rgba(0,0,0,0.4)');
     const panel = new THREE.Mesh(
-        new THREE.BoxGeometry(w, h, 0.01),
-        new THREE.MeshBasicMaterial({ map: loader.load('./texture/image/polipo.png') })
+        new THREE.PlaneGeometry(w, h),
+        new THREE.MeshBasicMaterial({ map: panelTexture, transparent: true, side: THREE.DoubleSide })
     );
 
     panel.userData = {
@@ -20,57 +23,79 @@ export function create(params) {
         isBillboard: true
     };
 
+    // 3. Contenitore Menu e Dati
+    const menuContainer = new THREE.Group();
+    panel.add(menuContainer);
+
     const menuItems = [
         { label: 'Sedia', type: 'sedia'},
         { label: 'Mega Murena', type: 'megaMurena'},
-        { label: 'Mega cubo', type: 'cubo'}
+        { label: 'Mega cubo', type: 'cubo'},
+        { label: 'Tavolo', type: 'tavolo'},
+        { label: 'Luce', type: 'luce'},
+        { label: 'Armadio', type: 'armadio'}
     ];
 
-    menuItems.forEach((item, index) => {
+    const itemMeshes = [];
 
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        canvas.width = 256;
-        canvas.height = 64;
+    // 4. Creazione Item (Proporzionati)
+    menuItems.forEach((item) => {
+        const itemW = w * 0.85;
+        const itemH = h * 0.13;
+        const itemTexture = createRoundedTexture(itemW, itemH, 20, 'rgba(255,255,255,0.5)', 'rgba(255,255,255,0.1)', item.label);
         
-        ctx.fillStyle = '#eeeeee'; 
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
-        // Stile del testo
-        ctx.fillStyle = 'black';
-        ctx.font = '40px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(item.label, canvas.width / 2, canvas.height / 2);
-
-        const textTexture = new THREE.CanvasTexture(canvas);
-
-        const itemBg = new THREE.Mesh(
-            new THREE.PlaneGeometry(0.35, 0.08),
-            new THREE.MeshBasicMaterial({ 
-                map: textTexture,
-                transparent: true, 
-                opacity: 0.5
-            })
+        const itemMesh = new THREE.Mesh(
+            new THREE.PlaneGeometry(itemW, itemH),
+            new THREE.MeshBasicMaterial({ map: itemTexture, transparent: true })
         );
 
-        // Posizioniamo le voci una sotto l'altra
-        itemBg.position.set(0, 0.2 - (index * 0.1), 0.011);
-
-        itemBg.userData = {
+        itemMesh.userData = {
             isActionButton: true,
-            onClick: () => {
-                console.log(`Spawno: ${item.label}`);
-                if (window.spawnObject) {
-                    window.spawnObject(item.type);
-                }
-            }
+            onClick: () => window.spawnObject?.(item.type)
         };
 
-        panel.add(itemBg);
+        menuContainer.add(itemMesh);
+        itemMeshes.push(itemMesh);
     });
 
-    // Aggiungiamo i soliti tasti Lock e Trash
+    // 5. Logica Paginazione
+    const updateVisibility = () => {
+        const start = currentPage * itemsPerPage;
+        const end = start + itemsPerPage;
+        const startY = h * 0.3; // Inizia dal 30% dell'altezza totale dal centro verso l'alto
+        const spacing = h * 0.16;
+
+        itemMeshes.forEach((mesh, index) => {
+            if (index >= start && index < end) {
+                mesh.visible = true;
+                const relativeIndex = index - start;
+                mesh.position.set(0, startY - (relativeIndex * spacing), 0.01);
+            } else {
+                mesh.visible = false;
+            }
+        });
+    };
+
+    // 6. Frecce di Navigazione
+    const arrowSize = w * 0.15;
+    const arrowY = -(h * 0.35); // Posizionate sopra i tasti lock/trash
+    
+    const onArrowClick = (dir) => {
+        const maxPages = Math.ceil(menuItems.length / itemsPerPage);
+        if (dir === 'up') currentPage = (currentPage > 0) ? currentPage - 1 : maxPages - 1;
+        else currentPage = (currentPage < maxPages - 1) ? currentPage + 1 : 0;
+        updateVisibility();
+    };
+
+    const arrowUp = createArrow('up', arrowSize, () => onArrowClick('up'));
+    arrowUp.position.set(-(w * 0.3), arrowY, 0.015);
+
+    const arrowDown = createArrow('down', arrowSize, () => onArrowClick('down'));
+    arrowDown.position.set((w * 0.3), arrowY, 0.015);
+
+    panel.add(arrowUp, arrowDown);
+
+    updateVisibility();
     attachControls(panel, w, h);
 
     return panel;

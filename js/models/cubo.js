@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { attachControls } from './buttonFactory.js'; // Assicurati che il nome del file sia corretto
+import { attachControls } from './factory.js'; // Assicurati che il nome del file sia corretto
 
 export function create(params = {}) {
     const size = params.size || 0.15; // 15cm di lato

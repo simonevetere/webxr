@@ -97,12 +97,12 @@ renderer.setAnimationLoop(() => {
         }
     });
 
-    if (scene && typeof scene.traverse === 'function') {
-        handleHover(controllers.left, scene);
-        handleHover(controllers.right, scene);
+    if (scene) {
+        handleHover(controllers.left, objectsToUpdate);
+        handleHover(controllers.right, objectsToUpdate);
         
-        handleInteraction(controllers.left, scene, saveToMemory);
-        handleInteraction(controllers.right, scene, saveToMemory);
+        handleInteraction(controllers.left, objectsToUpdate, saveToMemory);
+        handleInteraction(controllers.right, objectsToUpdate, saveToMemory);
     }
     
     renderer.render(scene, camera);

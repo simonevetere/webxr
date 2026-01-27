@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { attachControls } from './buttonFactory.js';
+import { attachControls } from './factory.js';
 
 export function create(params) {
     const w = params.width || 0.80;
