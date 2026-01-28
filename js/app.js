@@ -92,7 +92,7 @@ renderer.setAnimationLoop(() => {
             obj.position.lerp(targetPos, 0.1);
         }
 
-        if (obj.userData.isBillboard) {
+        if (obj.userData.isBillboard && !isGrabbed) {
             obj.lookAt(camera.position);
         }
     });

@@ -95,16 +95,16 @@ function updateGrab(controllerObj, objectsArray, fingerPos, wristQuat, isPinchin
             }
         }
 
-        if (controllerObj.grabbedObject) {
+         if (controllerObj.grabbedObject) {
             const target = controllerObj.grabbedObject.userData.controlledObject || controllerObj.grabbedObject;
             
-            // Applichiamo l'offset per mantenere la presa dove abbiamo pizzicato
-            target.position.copy(fingerPos.clone().add(controllerObj.grabOffset));
+            const newQuat = wristQuat.clone().multiply(controllerObj.initRotation);
+            target.quaternion.copy(newQuat);
 
-            if (!target.userData.isBillboard) {
-                const newQuat = wristQuat.clone().multiply(controllerObj.initRotation);
-                target.quaternion.copy(newQuat);
-            }
+            const rotatedOffset = controllerObj.grabOffset.clone().applyQuaternion(target.quaternion);
+            
+            target.position.copy(fingerPos.clone().add(rotatedOffset));
+
             if (onUpdate) onUpdate();
         }
     } else {

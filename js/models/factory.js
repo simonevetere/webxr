@@ -124,3 +124,51 @@ export function createArrow(direction, size, action) {
     arrow.userData = { isActionButton: true, onClick: action };
     return arrow;
 }
+
+/**
+ * Genera il contenuto del menu.
+ * Ogni 'item' nell'array deve avere la propria funzione 'action'.
+ */
+export function createMenuContent(items, state, config) {
+    const { w, h, itemsPerPage } = config;
+    const container = new THREE.Group();
+    
+    const start = state.currentPage * itemsPerPage;
+    const end = start + itemsPerPage;
+    const spacing = h * 0.16;
+    const startY = h * 0.3;
+
+    items.forEach((item, index) => {
+        if (index >= start && index < end) {
+            const itemW = w * 0.85;
+            const itemH = h * 0.13;
+            const texture = createRoundedTexture(itemW, itemH, 20, 'rgba(255,255,255,0.5)', 'rgba(255,255,255,0.1)', item.label);
+            
+            const mesh = new THREE.Mesh(
+                new THREE.PlaneGeometry(itemW, itemH),
+                new THREE.MeshBasicMaterial({ map: texture, transparent: true })
+            );
+
+            // La factory assegna l'azione specifica definita nell'item
+            mesh.userData = {
+                isActionButton: true,
+                onClick: item.action 
+            };
+
+            const relativeIndex = index - start;
+            mesh.position.set(0, startY - (relativeIndex * spacing), 0.01);
+            container.add(mesh);
+        }
+    });
+
+    return container;
+}
+
+/**
+ * Calcola l'indice della pagina successiva/precedente
+ */
+export function getNextPageIndex(dir, current, total, perPage) {
+    const max = Math.ceil(total / perPage);
+    if (dir === 'up') return (current > 0) ? current - 1 : max - 1;
+    return (current < max - 1) ? current + 1 : 0;
+}
