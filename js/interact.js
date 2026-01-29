@@ -12,7 +12,7 @@ export function handleInteraction(controllerObj, objectsArray, onUpdate) {
 
     if (!indexTip?.position || !thumbTip?.position || !wrist?.quaternion) return;
 
-    const isPinching = indexTip.position.distanceTo(thumbTip.position) < 0.035;
+    const isPinching = indexTip.position.distanceTo(thumbTip.position) < 0.01;
 
     updateButtons(objectsArray, indexTip.position);
 
@@ -77,7 +77,7 @@ function updateGrab(controllerObj, objectsArray, fingerPos, wristQuat, isPinchin
                     obj.worldToLocal(localFingerPos);
 
                     // 3. Controlliamo se il punto è dentro la Box (con un piccolo margine di tolleranza)
-                    const tolerance = 0.02; // 2cm di tolleranza extra "attorno" all'oggetto
+                    const tolerance = 0.01; // 2cm di tolleranza extra "attorno" all'oggetto
                     const box = obj.geometry.boundingBox.clone().expandByScalar(tolerance);
 
                     if (box.containsPoint(localFingerPos)) {
@@ -135,7 +135,7 @@ export function handleHover(controllerObj, objectsArray) {
                 
                 const dist = fingerPos.distanceTo(objWorldPos);
 
-                if (dist < 0.10) {
+                if (dist < 0.2) {
                     obj.scale.lerp(new THREE.Vector3(1.15, 1.15, 1.15), 0.2);
                 } else {
                     obj.scale.lerp(new THREE.Vector3(1, 1, 1), 0.2);
