@@ -1,0 +1,16 @@
+{
+    "standard": [
+        { "label": "Sedia", "id": "sedia" },
+        { "label": "Mega cubo", "id": "cubo" },
+        { "label": "Girasole", "id": "sunflower" },
+        { "label": "Murena", "id": "megaMurena" },
+        { "label": "test", "id": "test" },
+        { "label": "Mega Murena",
+          "id": "murena_v1", 
+          "url": "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/Flower/Flower.glb",
+          "scale": 0.8,
+          "isFollower": true,
+          "isBillboard": true
+        }
+    ]
+}

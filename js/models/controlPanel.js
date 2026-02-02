@@ -1,21 +1,25 @@
 import * as THREE from 'three';
 import { attachControls, createRoundedTexture, createArrow, createMenuContent, getNextPageIndex } from './factory.js';
 
-export function create(params) {
+export async function create(params) {
     const config = { w: 0.45, h: 0.60, itemsPerPage: 4 };
     const state = { currentPage: 0 };
 
-    // Ogni item ha la SUA azione (che in questo caso è lo spawn)
-    const menuItems = [
-        { label: 'Sedia', action: () => window.spawnObject?.('sedia') },
-        { label: 'Mega Murena', action: () => window.spawnObject?.('megaMurena') },
-        { label: 'Mega cubo', action: () => window.spawnObject?.('cubo') },
-        { label: 'Tavolo', action: () => window.spawnObject?.('tavolo') },
-        { label: 'Luce', action: () => window.spawnObject?.('luce') },
-        { label: 'Armadio', action: () => window.spawnObject?.('armadio') }
-    ];
+    const userId = params.userId || 'standard';
 
-    // Proprietà uniche del pannello
+    let menuItems = [];
+
+    try {
+        const response = await fetch(`http://localhost:3000/${userId}`);
+        const rawData = await response.json();
+
+        menuItems = rawData.map(item => ({
+            label: item.label,
+            action: () => window.spawnObject?.(item.id, item)
+        }));
+    } catch (error) {
+        console.error("Errore nel caricamento modelli dal server:", error);
+    }
     const panelTexture = createRoundedTexture(config.w, config.h, 40, 'rgba(255,255,255,0.8)', 'rgba(0,0,0,0.4)');
     const panel = new THREE.Mesh(
         new THREE.PlaneGeometry(config.w, config.h),

@@ -3,3 +3,6 @@
 webxr-sublime.sublime-workspace
 webxr-sublime.sublime-project
 *.pdf
+/node_modules
+package-lock.json
+package.json

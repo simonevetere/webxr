@@ -1,16 +1,23 @@
 export const Factory = {
     create: async (type, params = {}) => {
         try {
-            const module = await import(`./models/${type}.js`);
+            let module;
+            try {
+                module = await import(`./models/${type}.js`);
+            } catch (e) {
+                console.error("Errore Factory", e);
+                module = await import(`./models/generic.js`);
+            }
             
-            const obj = module.create(params);
+            const obj = await module.create(params);
             
-            obj.userData.type = type;
-            obj.userData.params = params;
-            
+            if (obj) {
+                obj.userData.type = type;
+                obj.userData.params = params;
+            }
             return obj;
         } catch (error) {
-            console.error(`Impossibile caricare il modello: ${type}. Assicurati che il file js/models/${type}.js esista.`, error);
+            console.error("Errore Factory", error);
             return null;
         }
     }
