@@ -2,12 +2,14 @@ import * as THREE from 'three';
 
 export async function create(params) {
     const panelGroup = new THREE.Group();
-    panelGroup.userData.isAnchor = true;
 
-    // 1. Base del pannello più alta (da 0.15 a 0.25) per fare spazio a 2 righe
     const baseGeo = new THREE.BoxGeometry(0.4, 0.25, 0.02);
     const baseMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
     const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+    
+    baseMesh.userData.isAnchor = true;
+    baseMesh.userData.controlledObject = panelGroup;
+    
     panelGroup.add(baseMesh);
 
     // --- HELPER: Crea bottone con Canvas Texture (con supporto per l'A CAPO) ---
