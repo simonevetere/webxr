@@ -9,7 +9,8 @@ export async function create(params) {
     const baseMat = new THREE.MeshBasicMaterial({ 
         color: 0x222222, 
         transparent: true,
-        opacity: 0.65
+        opacity: 0.65,
+        epthWrite: false
     });
     
     const baseMesh = new THREE.Mesh(baseGeo, baseMat);
