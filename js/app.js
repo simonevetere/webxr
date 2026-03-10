@@ -131,11 +131,19 @@ if(document.getElementById('m-btn-play')) {
 
     document.getElementById('m-btn-repo').addEventListener('click', (e) => {
         e.stopPropagation();
+        const prompt = document.getElementById('ar-prompt');
         
         if (!window.isRepositioning) {
             window.isRepositioning = true; 
-            e.target.style.background = '#ffaa00';
-            e.target.innerText = '✅';
+            e.target.style.background = '#ffaa00'; 
+            e.target.innerText = '✅'; 
+            
+            if (prompt) {
+                prompt.style.display = 'block';
+                prompt.innerText = 'Slowly move your phone to detect the surface.';
+                prompt.style.background = 'rgba(0,0,0,0.7)';
+                prompt.dataset.found = "false";
+            }
         } else {
             if (reticle && reticle.visible) {
                 window.activeObjects.forEach(obj => {
@@ -149,13 +157,23 @@ if(document.getElementById('m-btn-play')) {
             window.isRepositioning = false;
             reticle.visible = false;
             e.target.style.background = 'var(--neon-purple)';
-            e.target.innerText = '📍';
+            e.target.innerText = '📍'; 
+            if (prompt) prompt.style.display = 'none';
         }
+    });
+
+    document.getElementById('m-btn-rotate').addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.isAutoRotating = !window.isAutoRotating;
+        e.target.style.background = window.isAutoRotating ? '#ffaa00' : '#8800ff'; // Diventa arancione quando attivo
     });
 
     document.getElementById('m-btn-close').addEventListener('click', (e) => {
         e.stopPropagation();
-        window.history.back();
+        // Chiude la sessione WebXR in modo pulito e torna al sito nero
+        const session = renderer.xr.getSession();
+        if (session) session.end();
+        else window.history.back();
     });
 }
 
@@ -164,7 +182,7 @@ if(document.getElementById('m-btn-play')) {
 // =========================================================
 const activeObjects = [];
 window.activeObjects = activeObjects;
-
+window.isAutoRotating = false;
 const clock = new THREE.Clock();
 const mixers = [];
 window.mixers = mixers;
@@ -295,7 +313,11 @@ window.removeObject = removeObject;
 
 localStorage.removeItem('ar_memory'); 
 loadFromMemory();
-spawnObject('controlPanel', {}); 
+const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+if (!isMobileDevice) {
+    spawnObject('controlPanel', {}); 
+}
 
 const urlParams = new URLSearchParams(window.location.search);
 const modelUrls = urlParams.getAll('model');
@@ -390,7 +412,6 @@ renderer.setAnimationLoop((timestamp, frame) => {
         }
     });
 
-    // 4. INTERAZIONI DELLE MANI
     if (scene) {
         handleHover(controllers.left, objectsToUpdate);
         handleHover(controllers.right, objectsToUpdate);
@@ -398,6 +419,14 @@ renderer.setAnimationLoop((timestamp, frame) => {
         handleInteraction(controllers.left, objectsToUpdate, saveToMemory);
         handleInteraction(controllers.right, objectsToUpdate, saveToMemory);
     }
-    
+
+    if (window.isAutoRotating) {
+        window.activeObjects.forEach(obj => {
+            if (obj.userData.type === 'url_model') {
+                obj.rotation.y += 0.015;
+            }
+        });
+    }
+
     renderer.render(scene, camera);
 });
