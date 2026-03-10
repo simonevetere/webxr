@@ -29,7 +29,7 @@ renderer.xr.addEventListener('sessionstart', async () => {
         console.warn("Hit Test non supportato su questo dispositivo", e);
     }
 
-    if (arOverlay) arOverlay.style.display = 'flex';
+    if (arOverlay) arOverlay.style.display = 'block';
 });
 
 renderer.xr.addEventListener('sessionend', () => {

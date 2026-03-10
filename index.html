@@ -164,15 +164,19 @@
 </head>
 <body>
     
-    <div id="ar-overlay" style="display: none; width: 100%; height: 10%; background: rgba(0,0,0,0.5); border-top: 1px solid var(--neon-cyan); padding: 15px 10px; flex-wrap: wrap; gap: 10px; justify-content: center; backdrop-filter: blur(5px); pointer-events: auto; bottom: 0; left: 0; position: fixed; z-index: 999; box-sizing: border-box; display: flex;">
+    <div id="ar-overlay" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 999;">
         
-        <button id="m-btn-play" style="background: #00aa00; color: white; border: none; padding: 10px 15px; border-radius: 4px; font-weight: bold;">PLAY</button>
-        <button id="m-btn-zoom-out" style="background: #0055ff; color: white; border: none; padding: 10px 15px; border-radius: 4px; font-weight: bold;">- ZOOM</button>
-        <button id="m-btn-zoom-in" style="background: #55aaff; color: white; border: none; padding: 10px 15px; border-radius: 4px; font-weight: bold;">+ ZOOM</button>
-        
-        <button id="m-btn-repo" style="background: var(--neon-purple); color: white; border: 1px solid white; padding: 10px 20px; border-radius: 4px; font-weight: bold;">📍</button>
-        
-        <button id="m-btn-close" style="background: #dd0000; color: white; border: none; padding: 10px 20px; border-radius: 4px; font-weight: bold;">X</button>
+        <div style="position: absolute; bottom: 0; left: 0; width: 100%; background: rgba(0,0,0,0.6); border-top: 1px solid var(--neon-cyan); padding: 15px 10px; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-items: center; backdrop-filter: blur(5px); box-sizing: border-box; pointer-events: auto; height: 10%;">
+            
+            <button id="m-btn-play" style="background: #00aa00; color: white; border: none; padding: 10px 15px; border-radius: 4px; font-weight: bold; cursor: pointer;">PLAY</button>
+            <button id="m-btn-zoom-out" style="background: #0055ff; color: white; border: none; padding: 10px 15px; border-radius: 4px; font-weight: bold; cursor: pointer;">-</button>
+            <button id="m-btn-zoom-in" style="background: #55aaff; color: white; border: none; padding: 10px 15px; border-radius: 4px; font-weight: bold; cursor: pointer;">+</button>
+            
+            <button id="m-btn-repo" style="background: var(--neon-purple); color: white; border: 1px solid white; padding: 10px 20px; border-radius: 4px; font-weight: bold; cursor: pointer;">📍</button>
+            
+            <button id="m-btn-close" style="background: #dd0000; color: white; border: none; padding: 10px 20px; border-radius: 4px; font-weight: bold; cursor: pointer;">X</button>
+        </div>
+
     </div>
     
     <div class="interface-box">
