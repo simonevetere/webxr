@@ -86,23 +86,23 @@ export async function create(params) {
         }
     });
 
-    // 2. ZOOM OUT (Azzurro scuro)
     createButton(-0.05, 0.05, 0x0055ff, "-\nZOOM", function() {
         if (!window.activeObjects) return;
         window.activeObjects.forEach(obj => {
             if (obj.userData.type === 'url_model') {
                 obj.scale.multiplyScalar(0.8);
+                obj.userData.baseScale = obj.scale.clone();
                 obj.updateMatrixWorld(true);
             }
         });
     });
 
-    // 3. ZOOM IN (Azzurro chiaro)
     createButton(0.05, 0.05, 0x55aaff, "+\nZOOM", function() {
         if (!window.activeObjects) return;
         window.activeObjects.forEach(obj => {
             if (obj.userData.type === 'url_model') {
                 obj.scale.multiplyScalar(1.2);
+                obj.userData.baseScale = obj.scale.clone();
                 obj.updateMatrixWorld(true);
             }
         });

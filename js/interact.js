@@ -173,21 +173,22 @@ export function handleHover(controllerObj, objectsArray) {
     indexTip.getWorldPosition(fingerPos);
 
     objectsArray.forEach((mainObj) => {
-        mainObj.traverse((obj) => {
-            if (!obj || !obj.isMesh) return;
+        if (mainObj && mainObj.userData.isAnchor) {
+            const objWorldPos = new THREE.Vector3();
+            mainObj.getWorldPosition(objWorldPos);
+            
+            const dist = fingerPos.distanceTo(objWorldPos);
 
-            if (obj.userData.isAnchor || (obj.parent && obj.parent.userData.isAnchor)) {
-                const objWorldPos = new THREE.Vector3();
-                obj.getWorldPosition(objWorldPos);
-                
-                const dist = fingerPos.distanceTo(objWorldPos);
-
-                if (dist < 0.2) {
-                    obj.scale.lerp(new THREE.Vector3(1.15, 1.15, 1.15), 0.2);
-                } else {
-                    obj.scale.lerp(new THREE.Vector3(1, 1, 1), 0.2);
-                }
+            if (!mainObj.userData.baseScale) {
+                mainObj.userData.baseScale = mainObj.scale.clone();
             }
-        });
+
+            if (dist < 0.2) {
+                const hoverScale = mainObj.userData.baseScale.clone().multiplyScalar(1.05);
+                mainObj.scale.lerp(hoverScale, 0.2);
+            } else {
+                mainObj.scale.lerp(mainObj.userData.baseScale, 0.2);
+            }
+        }
     });
 }
