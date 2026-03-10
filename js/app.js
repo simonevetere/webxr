@@ -9,18 +9,30 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const { scene, camera, renderer } = initScene();
 
-renderer.xr.addEventListener('sessionstart', () => {
+// =========================================================
+// EVENTI AR SESSION E GESTIONE UI 
+// =========================================================
+const arOverlay = document.getElementById('ar-overlay');
+
+renderer.xr.addEventListener('sessionstart', async () => {
     const uiBox = document.querySelector('.interface-box');
     if (uiBox) uiBox.style.display = 'none';
-    
     document.body.style.background = 'transparent';
     document.body.style.backgroundImage = 'none';
-
     renderer.domElement.style.opacity = '1';
+
+    const session = renderer.xr.getSession();
+    try {
+        const viewerSpace = await session.requestReferenceSpace('viewer');
+        hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
+    } catch (e) {
+        console.warn("Hit Test non supportato su questo dispositivo", e);
+    }
+
+    if (arOverlay) arOverlay.style.display = 'flex';
 });
 
 renderer.xr.addEventListener('sessionend', () => {
-    // 1. Fai ricomparire l'interfaccia HTML
     const uiBox = document.querySelector('.interface-box');
     if (uiBox) uiBox.style.display = 'flex';
     
@@ -28,10 +40,128 @@ renderer.xr.addEventListener('sessionend', () => {
     document.body.style.backgroundImage = 'radial-gradient(circle at center, rgba(157, 0, 255, 0.05) 0%, transparent 70%)';
 
     renderer.domElement.style.opacity = '0.15';
+    
+    if (arOverlay) arOverlay.style.display = 'none';
+    hitTestSourceRequested = false;
+    hitTestSource = null;
 });
 
-document.querySelector('.interface-box').appendChild(ARButton.createButton(renderer, { optionalFeatures: ['hand-tracking'] }));
+// =========================================================
+// SETUP BOTTONE AR (Con Hit-Test e Overlay)
+// =========================================================
+const arBtn = ARButton.createButton(renderer, { 
+    requiredFeatures: ['hit-test'], 
+    optionalFeatures: ['dom-overlay', 'hand-tracking'],
+    domOverlay: { root: arOverlay } 
+});
+document.querySelector('.interface-box').appendChild(arBtn);
 
+// =========================================================
+// HIT TEST & MIRINO RETICOLO
+// =========================================================
+let hitTestSource = null;
+let hitTestSourceRequested = false;
+window.isRepositioning = false; 
+
+const reticleGeometry = new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2);
+const reticleMaterial = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+const reticle = new THREE.Mesh(reticleGeometry, reticleMaterial);
+reticle.matrixAutoUpdate = false;
+reticle.visible = false;
+scene.add(reticle);
+
+const controller = renderer.xr.getController(0);
+scene.add(controller);
+
+controller.addEventListener('select', () => {
+    if (window.isRepositioning && reticle.visible) {
+        
+        window.activeObjects.forEach(obj => {
+            if(obj.userData.type === 'url_model' || obj.userData.isAnchor) {
+                obj.position.setFromMatrixPosition(reticle.matrix);
+                if(obj.userData.type === 'url_model') obj.position.y += 0.05;
+            }
+        });
+
+        window.isRepositioning = false;
+        reticle.visible = false;
+        
+        const btnRepo = document.getElementById('m-btn-repo');
+        if(btnRepo){
+            btnRepo.style.background = 'var(--neon-purple)';
+            btnRepo.innerText = '📍 RIPOSIZIONA SUL TAVOLO';
+        }
+    }
+});
+
+// =========================================================
+// BOTTONI UI MOBILE 2D (Listener Eventi)
+// =========================================================
+if(document.getElementById('m-btn-play')) {
+    let isMobilePlaying = true;
+    document.getElementById('m-btn-play').addEventListener('click', (e) => {
+        e.stopPropagation(); 
+        isMobilePlaying = !isMobilePlaying;
+        e.target.style.background = isMobilePlaying ? '#00aa00' : '#aa0000';
+        e.target.innerText = isMobilePlaying ? 'PLAY' : 'STOP';
+        if (window.mixers) window.mixers.forEach(m => m.timeScale = isMobilePlaying ? 1 : 0);
+    });
+
+    document.getElementById('m-btn-zoom-in').addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.activeObjects.forEach(obj => {
+            if (obj.userData.type === 'url_model') {
+                obj.scale.multiplyScalar(1.2);
+                obj.userData.baseScale = obj.scale.clone();
+                obj.updateMatrixWorld(true);
+            }
+        });
+    });
+
+    document.getElementById('m-btn-zoom-out').addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.activeObjects.forEach(obj => {
+            if (obj.userData.type === 'url_model') {
+                obj.scale.multiplyScalar(0.8);
+                obj.userData.baseScale = obj.scale.clone();
+                obj.updateMatrixWorld(true);
+            }
+        });
+    });
+
+    document.getElementById('m-btn-repo').addEventListener('click', (e) => {
+        e.stopPropagation();
+        
+        if (!window.isRepositioning) {
+            window.isRepositioning = true; 
+            e.target.style.background = '#ffaa00';
+            e.target.innerText = '✅';
+        } else {
+            if (reticle && reticle.visible) {
+                window.activeObjects.forEach(obj => {
+                    if(obj.userData.type === 'url_model' || obj.userData.isAnchor) {
+                        obj.position.setFromMatrixPosition(reticle.matrix);
+                        if(obj.userData.type === 'url_model') obj.position.y += 0.05;
+                    }
+                });
+            }
+
+            window.isRepositioning = false;
+            reticle.visible = false;
+            e.target.style.background = 'var(--neon-purple)';
+            e.target.innerText = '📍';
+        }
+    });
+
+    document.getElementById('m-btn-close').addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.history.back();
+    });
+}
+
+// =========================================================
+// GLOBALI E GESTIONE MEMORIA
+// =========================================================
 const activeObjects = [];
 window.activeObjects = activeObjects;
 
@@ -75,6 +205,7 @@ function loadFromMemory() {
         });
     }
 }
+
 async function spawnObject(type, params, position = null) {
     const obj = await Factory.create(type, params);
     
@@ -91,6 +222,9 @@ async function spawnObject(type, params, position = null) {
     }
 }
 
+// =========================================================
+// CARICAMENTO DA URL
+// =========================================================
 function loadGLBFromUrl(url, index = 0, total = 1, customPos = null, customScale = null, animIndex = null) {
     const loader = new GLTFLoader();
     
@@ -143,6 +277,9 @@ function loadGLBFromUrl(url, index = 0, total = 1, customPos = null, customScale
         scene.add(anchorMesh);
         activeObjects.push(anchorMesh);
         
+        // Salviamo la scala di base per l'effetto hover e lo zoom!
+        anchorMesh.userData.baseScale = anchorMesh.scale.clone();
+        
         saveToMemory(); 
         
     }, undefined, (error) => {
@@ -150,6 +287,9 @@ function loadGLBFromUrl(url, index = 0, total = 1, customPos = null, customScale
     });
 }
 
+// =========================================================
+// INIT APPLICAZIONE
+// =========================================================
 window.spawnObject = spawnObject;
 window.removeObject = removeObject;
 
@@ -161,7 +301,7 @@ const urlParams = new URLSearchParams(window.location.search);
 const modelUrls = urlParams.getAll('model');
 const modelPos = urlParams.getAll('pos');
 const modelScale = urlParams.getAll('scale');
-const modelAnim = urlParams.getAll('anim'); // Estrai i parametri anim
+const modelAnim = urlParams.getAll('anim'); 
 
 if (modelUrls.length > 0) {
     modelUrls.forEach((url, index) => {
@@ -182,7 +322,6 @@ if (modelUrls.length > 0) {
             }
         }
 
-        // Estrai l'indice dell'animazione
         let animIndex = null;
         if (modelAnim[index]) {
             animIndex = parseInt(modelAnim[index].trim(), 10);
@@ -194,6 +333,9 @@ if (modelUrls.length > 0) {
     loadFromMemory();
 }
 
+// =========================================================
+// MANI E CONTROLLER
+// =========================================================
 const handModels = new XRHandModelFactory();
 const controllers = {
     left: { hand: renderer.xr.getHand(0), grabbedObject: null, lastPinch: false },
@@ -205,11 +347,33 @@ Object.values(controllers).forEach(c => {
     scene.add(c.hand);
 });
 
-renderer.setAnimationLoop(() => {
+// =========================================================
+// LOOP DI ANIMAZIONE (Il Cervello Pulito)
+// =========================================================
+renderer.setAnimationLoop((timestamp, frame) => {
     
+    // 1. MOTORE HIT-TEST PER I TAVOLI (Ora è super leggero e stabile)
+    if (frame && window.isRepositioning && hitTestSource) {
+        const referenceSpace = renderer.xr.getReferenceSpace();
+        const hitTestResults = frame.getHitTestResults(hitTestSource);
+
+        if (hitTestResults.length > 0) {
+            const hit = hitTestResults[0];
+            const pose = hit.getPose(referenceSpace);
+            reticle.visible = true;
+            reticle.matrix.fromArray(pose.transform.matrix);
+        } else {
+            reticle.visible = false;
+        }
+    } else if (reticle) {
+        reticle.visible = false;
+    }
+
+    // 2. AGGIORNAMENTO MIXER (Animazioni GLB)
     const delta = clock.getDelta();
     mixers.forEach(mixer => mixer.update(delta));
 
+    // 3. LOGICA DI MOVIMENTO OGGETTI (Follower / Billboard)
     const objectsToUpdate = activeObjects.filter(obj => obj && obj.parent);
 
     objectsToUpdate.forEach(obj => {
@@ -226,6 +390,7 @@ renderer.setAnimationLoop(() => {
         }
     });
 
+    // 4. INTERAZIONI DELLE MANI
     if (scene) {
         handleHover(controllers.left, objectsToUpdate);
         handleHover(controllers.right, objectsToUpdate);
