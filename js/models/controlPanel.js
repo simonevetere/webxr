@@ -55,7 +55,7 @@ export async function create(params) {
         const btnMat = new THREE.MeshBasicMaterial({ map: texture });
         const btnMesh = new THREE.Mesh(btnGeo, btnMat);
         
-        btnMesh.position.set(x, y, 0.011); 
+        btnMesh.position.set(x, y, 0.015);
         
         btnMesh.userData.isActionButton = true;
         btnMesh.userData.mesh = btnMesh;
