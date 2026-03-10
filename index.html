@@ -1,9 +1,158 @@
 <!doctype html>
-<html>
+<html lang="it">
 <head>
     <meta charset='utf-8'>
     <meta name='viewport' content='width=device-width, initial-scale=1, user-scalable=no'>
-    <title>AR Modular Panel</title>
+    <title>XR Interface - Web AR</title>
+    
+    <style>
+        /* Variabili estratte dal tuo xri.onl */
+        :root {
+            --neon-purple: #9d00ff;
+            --neon-cyan: #00ffff;
+            --text-dim: #a0a0a0;
+            --bg-color: #050505;
+        }
+
+        /* Sfondo dark con gradiente radiale in stile copertina */
+        body {
+            background-color: var(--bg-color);
+            background-image: radial-gradient(circle at center, rgba(157, 0, 255, 0.05) 0%, transparent 70%);
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        /* Contenitore stile "Hero Visual" del tuo sito */
+        .interface-box {
+            position: relative;
+            padding: 60px 40px;
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(157, 0, 255, 0.2);
+            border-radius: 8px;
+            box-shadow: 0 0 40px rgba(0,0,0,1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            backdrop-filter: blur(5px);
+            z-index: 10;
+        }
+
+        /* Angoli decorativi Cyan (identici ai tuoi!) */
+        .interface-box::before {
+            content: '';
+            position: absolute; top: 15px; left: 15px; width: 20px; height: 20px;
+            border-top: 2px solid var(--neon-cyan); border-left: 2px solid var(--neon-cyan);
+        }
+        .interface-box::after {
+            content: '';
+            position: absolute; bottom: 15px; right: 15px; width: 20px; height: 20px;
+            border-bottom: 2px solid var(--neon-cyan); border-right: 2px solid var(--neon-cyan);
+        }
+
+        /* Titolo e accent */
+        .tech-accent {
+            color: var(--neon-purple);
+            font-family: monospace;
+            font-size: 0.8rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            margin-bottom: 15px;
+        }
+
+        h1 {
+            font-size: clamp(2rem, 6vw, 3rem);
+            margin: 0 0 40px 0;
+            font-weight: 300;
+        }
+        h1 span {
+            color: var(--neon-cyan);
+            font-weight: bold;
+        }
+
+        /* 1. Bottone "Use the App" (Stile bottone outline purple) */
+        .app-btn {
+            background: transparent;
+            color: #fff;
+            text-decoration: none;
+            padding: 15px 40px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: monospace;
+            letter-spacing: 2px;
+            border: 1px solid var(--neon-purple);
+            transition: all 0.3s ease;
+            min-width: 260px;
+            text-align: center;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            box-sizing: border-box;
+        }
+
+        .app-btn:hover {
+            background: rgba(157, 0, 255, 0.15);
+            box-shadow: 0 0 20px rgba(157, 0, 255, 0.3);
+        }
+
+        /* 2. Bottone AR di Three.js (Ora sta al suo posto!) */
+        #ARButton {
+            position: relative !important; 
+            bottom: auto !important;     /* ANNULLA IL POSIZIONAMENTO DI THREE.JS */
+            left: auto !important;       /* ANNULLA IL POSIZIONAMENTO DI THREE.JS */
+            transform: none !important;  /* ANNULLA IL POSIZIONAMENTO DI THREE.JS */
+            margin: 0 !important;
+            margin-top: 15px !important; /* Distanza dal bottone sopra */
+            
+            background: var(--neon-cyan) !important;
+            border: none !important;
+            border-radius: 4px !important;
+            min-width: 260px !important;
+            padding: 15px 40px !important;
+            height: auto !important;
+            cursor: pointer !important;
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.2) !important;
+            transition: all 0.3s ease !important;
+            box-sizing: border-box !important;
+            color: transparent !important; 
+        }
+
+        #ARButton::after {
+            content: "CONTINUE ON WEB"; 
+            color: #000;
+            font-weight: bold;
+            font-family: monospace;
+            font-size: 14px;
+            letter-spacing: 2px;
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 100%;
+            pointer-events: none; 
+        }
+
+        #ARButton:hover {
+            background: #fff !important;
+            box-shadow: 0 0 25px rgba(0, 255, 255, 0.5) !important;
+        }
+
+        /* Sfondo scena 3D mezza trasparente */
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 0; 
+            opacity: 0.15;
+            pointer-events: none; /* Impedisce che il canvas rubi i click dei bottoni */
+        }
+    </style>
+
     <script type="importmap">
         {
             "imports": {
@@ -14,6 +163,16 @@
     </script>
 </head>
 <body>
+    
+    <div class="interface-box">
+        <div class="tech-accent">// XR_ENVIRONMENT_READY</div>
+        <h1>XR <span>Interface</span></h1>
+        
+        <a href="https://play.google.com/store" class="app-btn">USE NATIVE APP</a>
+
+        </div>
+
     <script type="module" src="./js/app.js"></script>
+
 </body>
 </html>

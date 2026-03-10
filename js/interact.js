@@ -13,6 +13,14 @@ export function handleInteraction(controllerObj, objectsArray, onUpdate) {
     if (!indexTip?.position || !thumbTip?.position || !wrist?.quaternion) return;
 
     const isPinching = indexTip.position.distanceTo(thumbTip.position) < 0.01;
+    
+    objectsArray.forEach(mainObj => {
+        mainObj.traverse(obj => {
+            if (obj.userData.isHTML) {
+                updateHTMLTouch(obj, indexTip.position, isPinching, controllerObj.lastPinch);
+            }
+        });
+    });
 
     updateButtons(objectsArray, indexTip.position);
 
@@ -111,6 +119,48 @@ function updateGrab(controllerObj, objectsArray, fingerPos, wristQuat, isPinchin
         controllerObj.grabbedObject = null;
         controllerObj.initRotation = null;
         controllerObj.grabOffset = null;
+    }
+}
+
+function updateHTMLTouch(obj, fingerPos) {
+    if (!obj.geometry || !obj.geometry.parameters) {
+        console.warn("HTMLInteraction: Oggetto senza parametri di geometria", obj);
+        return;
+    }
+
+    // 1. Log posizione globale in ingresso
+    console.log("Finger World Pos:", fingerPos); 
+
+    // Trasformiamo la posizione del dito in locale
+    const localFinger = obj.worldToLocal(fingerPos.clone());
+
+    // 2. Otteniamo dimensioni della mesh
+    const w = obj.geometry.parameters.width / 2;
+    const h = obj.geometry.parameters.height / 2;
+
+    // 3. Verifica collisione
+    const isInsideX = localFinger.x > -w && localFinger.x < w;
+    const isInsideY = localFinger.y > -h && localFinger.y < h;
+    const isTouchingZ = Math.abs(localFinger.z) < 0.02; // Leggermente aumentato per debug
+
+    // LOG DI STATO: Questo ti dice esattamente cosa fallisce
+    if (Math.abs(localFinger.z) < 0.1) { // Logga solo se sei relativamente vicino (10cm)
+        console.log(`HTML Check -> X: ${isInsideX} (${localFinger.x.toFixed(3)}), Y: ${isInsideY} (${localFinger.y.toFixed(3)}), Z: ${isTouchingZ} (${localFinger.z.toFixed(3)})`);
+    }
+
+    if (isInsideX && isInsideY && isTouchingZ) {
+        if (!obj.userData.isBeingTouched) {
+            const x = (localFinger.x / (w * 2)) + 0.5;
+            const y = (localFinger.y / (h * 2)) + 0.5;
+            const uv = new THREE.Vector2(x, 1 - y);
+
+            console.log("%c CLICK HTML eseguito!", "color: #00ff00; font-weight: bold;", "UV:", uv);
+
+            obj.dispatchEvent({ type: 'click', uv: uv });
+            obj.userData.isBeingTouched = true;
+        }
+    } else {
+        obj.userData.isBeingTouched = false;
     }
 }
 

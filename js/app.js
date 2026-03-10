@@ -5,11 +5,39 @@ import { initScene } from './sceneSetup.js';
 import { handleInteraction } from './interact.js';
 import { handleHover } from './interact.js';
 import { Factory } from './objects.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const { scene, camera, renderer } = initScene();
-document.body.appendChild(ARButton.createButton(renderer, { optionalFeatures: ['hand-tracking'] }));
+
+renderer.xr.addEventListener('sessionstart', () => {
+    const uiBox = document.querySelector('.interface-box');
+    if (uiBox) uiBox.style.display = 'none';
+    
+    document.body.style.background = 'transparent';
+    document.body.style.backgroundImage = 'none';
+
+    renderer.domElement.style.opacity = '1';
+});
+
+renderer.xr.addEventListener('sessionend', () => {
+    // 1. Fai ricomparire l'interfaccia HTML
+    const uiBox = document.querySelector('.interface-box');
+    if (uiBox) uiBox.style.display = 'flex';
+    
+    document.body.style.backgroundColor = 'var(--bg-color)';
+    document.body.style.backgroundImage = 'radial-gradient(circle at center, rgba(157, 0, 255, 0.05) 0%, transparent 70%)';
+
+    renderer.domElement.style.opacity = '0.15';
+});
+
+document.querySelector('.interface-box').appendChild(ARButton.createButton(renderer, { optionalFeatures: ['hand-tracking'] }));
 
 const activeObjects = [];
+window.activeObjects = activeObjects;
+
+const clock = new THREE.Clock();
+const mixers = [];
+window.mixers = mixers;
 
 function removeObject(obj) {
     if (!obj) return;
@@ -41,13 +69,12 @@ function loadFromMemory() {
     if (saved) {
         const data = JSON.parse(saved);
         data.forEach(item => {
-            spawnObject(item.type, item.params, new THREE.Vector3().fromArray(item.pos));
+            if (item.type !== 'url_model') {
+                spawnObject(item.type, item.params, new THREE.Vector3().fromArray(item.pos));
+            }
         });
-    } else {
-        spawnObject('controlPanel', { texture: './texture/image/polipo.png' });
     }
 }
-
 async function spawnObject(type, params, position = null) {
     const obj = await Factory.create(type, params);
     
@@ -64,10 +91,104 @@ async function spawnObject(type, params, position = null) {
     }
 }
 
+function loadGLBFromUrl(url, index = 0, total = 1, customPos = null, customScale = null, animIndex = null) {
+    const loader = new GLTFLoader();
+    
+    loader.load(url, (gltf) => {
+        const model = gltf.scene;
+
+        if (customScale) {
+            model.scale.set(customScale[0], customScale[1], customScale[2]);
+            model.updateMatrixWorld(true);
+        }
+
+        if (gltf.animations && gltf.animations.length > 0 && animIndex !== null && !isNaN(animIndex)) {
+            const mixer = new THREE.AnimationMixer(model);
+            mixers.push(mixer);
+            
+            const clip = gltf.animations[animIndex] || gltf.animations[0];
+            if (clip) {
+                mixer.clipAction(clip).play();
+            }
+        }
+
+        const box = new THREE.Box3().setFromObject(model);
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+
+        model.position.sub(center);
+
+        const hitBoxGeometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+        const hitBoxMaterial = new THREE.MeshBasicMaterial({ visible: false, wireframe: true }); 
+        const anchorMesh = new THREE.Mesh(hitBoxGeometry, hitBoxMaterial);
+
+        anchorMesh.userData.isAnchor = true;
+        anchorMesh.userData.type = 'url_model'; 
+        anchorMesh.userData.params = { url: url, pos: customPos, scale: customScale };
+
+        anchorMesh.add(model);
+
+        if (customPos) {
+            const targetPos = new THREE.Vector3(customPos[0], customPos[1], customPos[2]).applyMatrix4(camera.matrixWorld);
+            anchorMesh.position.copy(targetPos);
+        } else {
+            const offsetX = (index * 0.4) - ((total - 1) * 0.2);
+            const targetPos = new THREE.Vector3(offsetX, 0, -0.6).applyMatrix4(camera.matrixWorld);
+            anchorMesh.position.copy(targetPos);
+        }
+
+        scene.add(anchorMesh);
+        activeObjects.push(anchorMesh);
+        
+        saveToMemory(); 
+        
+    }, undefined, (error) => {
+        console.error('Errore nel caricamento del modello da URL:', error);
+    });
+}
+
 window.spawnObject = spawnObject;
 window.removeObject = removeObject;
 
 loadFromMemory();
+spawnObject('controlPanel', {}); 
+
+const urlParams = new URLSearchParams(window.location.search);
+const modelUrls = urlParams.getAll('model');
+const modelPos = urlParams.getAll('pos');
+const modelScale = urlParams.getAll('scale');
+const modelAnim = urlParams.getAll('anim'); // Estrai i parametri anim
+
+if (modelUrls.length > 0) {
+    modelUrls.forEach((url, index) => {
+        
+        let posArray = null;
+        if (modelPos[index]) {
+            const parts = modelPos[index].split(',').map(s => parseFloat(s.trim()));
+            if (parts.length === 3 && !parts.includes(NaN)) posArray = parts;
+        }
+        
+        let scaleArray = null;
+        if (modelScale[index]) {
+            const parts = modelScale[index].split(',').map(s => parseFloat(s.trim()));
+            if (parts.length === 1 && !isNaN(parts[0])) {
+                scaleArray = [parts[0], parts[0], parts[0]];
+            } else if (parts.length === 3 && !parts.includes(NaN)) {
+                scaleArray = parts;
+            }
+        }
+
+        // Estrai l'indice dell'animazione
+        let animIndex = null;
+        if (modelAnim[index]) {
+            animIndex = parseInt(modelAnim[index].trim(), 10);
+        }
+
+        loadGLBFromUrl(url, index, modelUrls.length, posArray, scaleArray, animIndex);
+    });
+} else {
+    loadFromMemory();
+}
 
 const handModels = new XRHandModelFactory();
 const controllers = {
@@ -81,6 +202,10 @@ Object.values(controllers).forEach(c => {
 });
 
 renderer.setAnimationLoop(() => {
+    
+    const delta = clock.getDelta();
+    mixers.forEach(mixer => mixer.update(delta));
+
     const objectsToUpdate = activeObjects.filter(obj => obj && obj.parent);
 
     objectsToUpdate.forEach(obj => {
