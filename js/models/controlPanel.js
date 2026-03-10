@@ -1,10 +1,17 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 export async function create(params) {
     const panelGroup = new THREE.Group();
 
-    const baseGeo = new THREE.BoxGeometry(0.4, 0.25, 0.02);
-    const baseMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
+    const baseGeo = new RoundedBoxGeometry(0.4, 0.25, 0.02, 4, 0.01);
+    
+    const baseMat = new THREE.MeshBasicMaterial({ 
+        color: 0x222222, 
+        transparent: true,
+        opacity: 0.65
+    });
+    
     const baseMesh = new THREE.Mesh(baseGeo, baseMat);
     
     baseMesh.userData.isAnchor = true;
@@ -68,7 +75,7 @@ export async function create(params) {
     
     // 1. PLAY / STOP
     let isPlaying = true;
-    createButton(-0.12, 0.05, 0x00aa00, "PLAY", function() {
+    createButton(-0.15, 0.05, 0x00aa00, "PLAY", function() {
         const btn = this.mesh;
         isPlaying = !isPlaying;
         btn.userData.updateVisuals(isPlaying ? 0x00aa00 : 0xaa0000, isPlaying ? "PLAY" : "STOP");
@@ -79,7 +86,7 @@ export async function create(params) {
     });
 
     // 2. ZOOM OUT (Azzurro scuro)
-    createButton(-0.04, 0.05, 0x0055ff, "-\nZOOM", function() {
+    createButton(-0.05, 0.05, 0x0055ff, "-\nZOOM", function() {
         if (!window.activeObjects) return;
         window.activeObjects.forEach(obj => {
             if (obj.userData.type === 'url_model') {
@@ -90,7 +97,7 @@ export async function create(params) {
     });
 
     // 3. ZOOM IN (Azzurro chiaro)
-    createButton(0.04, 0.05, 0x55aaff, "+\nZOOM", function() {
+    createButton(0.05, 0.05, 0x55aaff, "+\nZOOM", function() {
         if (!window.activeObjects) return;
         window.activeObjects.forEach(obj => {
             if (obj.userData.type === 'url_model') {
@@ -102,7 +109,7 @@ export async function create(params) {
 
     // 4. GRAB / LOCK (Arancione)
     let isGrabEnabled = true;
-    createButton(0.12, 0.05, 0xddaa00, "GRAB", function() {
+    createButton(0.15, 0.05, 0xddaa00, "GRAB", function() {
         const btn = this.mesh;
         isGrabEnabled = !isGrabEnabled;
         btn.userData.updateVisuals(isGrabEnabled ? 0xddaa00 : 0x8800ff, isGrabEnabled ? "GRAB" : "LOCK");

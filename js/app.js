@@ -81,7 +81,7 @@ async function spawnObject(type, params, position = null) {
     if (obj) {
         if (position) obj.position.copy(position);
         else {
-            const targetPos = new THREE.Vector3(0, 0, -0.6).applyMatrix4(camera.matrixWorld);
+            const targetPos = new THREE.Vector3(0, -0.4, -0.6).applyMatrix4(camera.matrixWorld);
             obj.position.copy(targetPos);
         }
         
@@ -102,13 +102,16 @@ function loadGLBFromUrl(url, index = 0, total = 1, customPos = null, customScale
             model.updateMatrixWorld(true);
         }
 
-        if (gltf.animations && gltf.animations.length > 0 && animIndex !== null && !isNaN(animIndex)) {
-            const mixer = new THREE.AnimationMixer(model);
-            mixers.push(mixer);
+        if (gltf.animations && gltf.animations.length > 0) {
+            if (!window.mixers) window.mixers = [];
             
-            const clip = gltf.animations[animIndex] || gltf.animations[0];
-            if (clip) {
-                mixer.clipAction(clip).play();
+            const mixer = new THREE.AnimationMixer(model);
+            window.mixers.push(mixer);
+            
+            const clipToPlay = (animIndex !== null && gltf.animations[animIndex]) ? gltf.animations[animIndex] : gltf.animations[0];
+            
+            if (clipToPlay) {
+                mixer.clipAction(clipToPlay).play();
             }
         }
 
@@ -150,6 +153,7 @@ function loadGLBFromUrl(url, index = 0, total = 1, customPos = null, customScale
 window.spawnObject = spawnObject;
 window.removeObject = removeObject;
 
+localStorage.removeItem('ar_memory'); 
 loadFromMemory();
 spawnObject('controlPanel', {}); 
 

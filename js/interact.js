@@ -73,27 +73,24 @@ function updateGrab(controllerObj, objectsArray, fingerPos, wristQuat, isPinchin
                 let found = false;
 
                 mainObj.traverse((obj) => {
-                    if (found || !obj || !obj.userData.isAnchor) return;
+                    if (found || !obj || !obj.userData.isAnchor || !obj.geometry) return;
 
-                    // 1. Creiamo o recuperiamo la Bounding Box dell'oggetto
                     if (!obj.geometry.boundingBox) obj.geometry.computeBoundingBox();
                     
-                    // 2. Trasformiamo la posizione del dito nello spazio LOCALE dell'oggetto
-                    // Questo serve per capire se il dito è "dentto" l'oggetto anche se è ruotato
                     const localFingerPos = fingerPos.clone();
-                    obj.updateMatrixWorld(); // Assicuriamoci che la matrice sia aggiornata
+                    obj.updateMatrixWorld(); 
                     obj.worldToLocal(localFingerPos);
 
-                    // 3. Controlliamo se il punto è dentro la Box (con un piccolo margine di tolleranza)
-                    const tolerance = 0.01; // 2cm di tolleranza extra "attorno" all'oggetto
+                    const tolerance = 0.015; 
                     const box = obj.geometry.boundingBox.clone().expandByScalar(tolerance);
 
                     if (box.containsPoint(localFingerPos)) {
                         controllerObj.grabbedObject = obj;
                         const target = obj.userData.controlledObject || obj;
 
-                        // Calcoliamo l'offset iniziale (fondamentale per evitare lo scatto al centro)
                         controllerObj.grabOffset = new THREE.Vector3().subVectors(target.position, fingerPos);
+                        controllerObj.grabOffset.applyQuaternion(wristQuat.clone().invert()); 
+                        
                         controllerObj.initRotation = target.quaternion.clone().premultiply(wristQuat.clone().invert());
                         
                         found = true;
@@ -106,11 +103,12 @@ function updateGrab(controllerObj, objectsArray, fingerPos, wristQuat, isPinchin
          if (controllerObj.grabbedObject) {
             const target = controllerObj.grabbedObject.userData.controlledObject || controllerObj.grabbedObject;
             
+            // Applica la nuova rotazione
             const newQuat = wristQuat.clone().multiply(controllerObj.initRotation);
             target.quaternion.copy(newQuat);
 
-            const rotatedOffset = controllerObj.grabOffset.clone().applyQuaternion(target.quaternion);
-            
+            // IL FIX DELLO SCATTO: Ora l'offset segue la rotazione del polso, non dell'oggetto!
+            const rotatedOffset = controllerObj.grabOffset.clone().applyQuaternion(wristQuat);
             target.position.copy(fingerPos.clone().add(rotatedOffset));
 
             if (onUpdate) onUpdate();
@@ -121,7 +119,6 @@ function updateGrab(controllerObj, objectsArray, fingerPos, wristQuat, isPinchin
         controllerObj.grabOffset = null;
     }
 }
-
 function updateHTMLTouch(obj, fingerPos) {
     if (!obj.geometry || !obj.geometry.parameters) {
         console.warn("HTMLInteraction: Oggetto senza parametri di geometria", obj);
