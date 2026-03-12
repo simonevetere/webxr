@@ -4,22 +4,16 @@
     <meta charset='utf-8'>
     <meta name='viewport' content='width=device-width, initial-scale=1, user-scalable=no'>
     <title>XR Interface - Web AR</title>
-    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        /* Variabili estratte dal tuo xri.onl */
         :root {
             --neon-purple: #9d00ff;
-            --neon-cyan: #00ffff;
-            --text-dim: #a0a0a0;
-            --bg-color: #050505;
+            --bg-color: #7d7d7d; /* Il tuo grigio */
         }
 
-        /* Sfondo dark con gradiente radiale in stile copertina */
         body {
             background-color: var(--bg-color);
-            background-image: radial-gradient(circle at center, rgba(157, 0, 255, 0.05) 0%, transparent 70%);
-            color: #ffffff;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
             height: 100vh;
             display: flex;
@@ -27,170 +21,194 @@
             align-items: center;
             justify-content: center;
             overflow: hidden;
+            color: #ffffff;
+            font-family: 'Segoe UI', sans-serif;
         }
 
-        /* Contenitore stile "Hero Visual" del tuo sito */
+        /* 1. Canvas 3D (Z-index basso e mezzo trasparente per vederlo) */
+        canvas {
+            position: absolute !important;
+            top: 0; left: 0;
+            z-index: 1; 
+            opacity: 0.5; /* Aumentato un po' per staccare dal grigio */
+            pointer-events: none !important;
+        }
+
+        /* 2. Box dell'interfaccia */
         .interface-box {
             position: relative;
-            padding: 60px 40px;
-            background: rgba(0, 0, 0, 0.6);
-            border: 1px solid rgba(157, 0, 255, 0.2);
-            border-radius: 8px;
-            box-shadow: 0 0 40px rgba(0,0,0,1);
+            padding: 40px;
+            width: 100%;
+            height: 100%;
+            /* Usiamo la versione RGBA del tuo grigio per farlo un po' trasparente (0.9) e vedere dietro */
+            background: rgba(125, 125, 125, 1); 
             display: flex;
             flex-direction: column;
             align-items: center;
-            backdrop-filter: blur(5px);
-            z-index: 10;
+            z-index: 10; /* Sopra al canvas */
+            min-width: 300px;
         }
 
-        /* Angoli decorativi Cyan (identici ai tuoi!) */
-        .interface-box::before {
-            content: '';
-            position: absolute; top: 15px; left: 15px; width: 20px; height: 20px;
-            border-top: 2px solid var(--neon-cyan); border-left: 2px solid var(--neon-cyan);
-        }
-        .interface-box::after {
-            content: '';
-            position: absolute; bottom: 15px; right: 15px; width: 20px; height: 20px;
-            border-bottom: 2px solid var(--neon-cyan); border-right: 2px solid var(--neon-cyan);
-        }
-
-        /* Titolo e accent */
         .tech-accent {
-            color: var(--neon-purple);
+            color: white;
             font-family: monospace;
             font-size: 0.8rem;
             letter-spacing: 3px;
             text-transform: uppercase;
-            margin-bottom: 15px;
+            margin-bottom: 20px;
         }
 
-        h1 {
-            font-size: clamp(2rem, 6vw, 3rem);
-            margin: 0 0 40px 0;
-            font-weight: 300;
-        }
-        h1 span {
-            color: var(--neon-cyan);
-            font-weight: bold;
-        }
-
-        /* 1. Bottone "Use the App" (Stile bottone outline purple) */
         .app-btn {
             background: transparent;
             color: #fff;
             text-decoration: none;
             padding: 15px 40px;
             border-radius: 4px;
-            font-size: 14px;
             font-family: monospace;
-            letter-spacing: 2px;
-            border: 1px solid var(--neon-purple);
-            transition: all 0.3s ease;
-            min-width: 260px;
+            border: 1px solid white;
+            width: 50%;
             text-align: center;
             margin-bottom: 20px;
             text-transform: uppercase;
+            cursor: pointer;
             box-sizing: border-box;
+            display: block;
         }
 
-        .app-btn:hover {
-            background: rgba(157, 0, 255, 0.15);
-            box-shadow: 0 0 20px rgba(157, 0, 255, 0.3);
+        model-viewer {
+            height: 50%;
+            width: 100%;
+            border-radius: 4px;
         }
 
-        /* 2. Bottone AR di Three.js (Ora sta al suo posto!) */
+        /* 3. Il tasto AR nativo di Three.js (Allineamento Sistemato) */
         #ARButton {
-            position: relative !important; 
-            bottom: auto !important;     /* ANNULLA IL POSIZIONAMENTO DI THREE.JS */
-            left: auto !important;       /* ANNULLA IL POSIZIONAMENTO DI THREE.JS */
-            transform: none !important;  /* ANNULLA IL POSIZIONAMENTO DI THREE.JS */
-            margin: 0 !important;
-            margin-top: 15px !important; /* Distanza dal bottone sopra */
-            
-            background: var(--neon-cyan) !important;
+            position: fixed !important; 
+            bottom: 20% !important;     
+            left: 50% !important;
+            transform: translateX(-50%) !important;
+            z-index: 999 !important; /* Sopra a tutto il resto */
+            background: #fff !important;
+            color: #000 !important;
             border: none !important;
             border-radius: 4px !important;
-            min-width: 260px !important;
-            padding: 15px 40px !important;
-            height: auto !important;
+            width: calc(100% - 60px) !important;
+            max-width: 320px !important;
+            padding: 15px !important;
             cursor: pointer !important;
-            box-shadow: 0 0 15px rgba(0, 255, 255, 0.2) !important;
-            transition: all 0.3s ease !important;
-            box-sizing: border-box !important;
-            color: transparent !important;
-        }
-
-        #ARButton::after {
-            content: "CONTINUE ON WEB"; 
-            color: #000;
-            font-weight: bold;
             font-family: monospace;
-            font-size: 14px;
-            letter-spacing: 2px;
-            position: absolute;
-            left: 50%;
-            top: 50%;
-            transform: translate(-50%, -50%);
-            width: 100%;
-            pointer-events: none; 
-        }
-
-        #ARButton:hover {
-            background: #fff !important;
-            box-shadow: 0 0 25px rgba(0, 255, 255, 0.5) !important;
-        }
-
-        /* Sfondo scena 3D mezza trasparente */
-        canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            z-index: 0; 
-            opacity: 0.15;
-            pointer-events: none; /* Impedisce che il canvas rubi i click dei bottoni */
+            font-weight: bold;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            text-align: center !important;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3) !important;
         }
     </style>
 
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
     <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-            }
-        }
+        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
     </script>
 </head>
 <body>
-    
-    <div id="ar-overlay" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 999;">
+    <div onclick="window.history.back();" style="z-index: 999; position: absolute; top: 25px; right: 25px; color: white; font-size: 32px; cursor: pointer; pointer-events: auto;">✕</div>
+    <div id="ar-overlay" style="display: none; position: absolute; inset: 0; z-index: 999; pointer-events: none;">
+
+        <div id="ar-prompt" style="display: none; position: absolute; top: 20%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.7); color: white; padding: 15px 25px; border-radius: 30px; font-weight: bold; text-align: center; border: 1px solid white; pointer-events: none; text-shadow: 0 2px 4px rgba(0,0,0,0.5); width: 80%; max-width: 300px;">
+            Slowly move your phone to detect the surface.
+        </div>
+
+        <div id="m-btn-close" style="position: absolute; top: 25px; right: 25px; color: white; font-size: 32px; cursor: pointer; pointer-events: auto;">✕</div>
         
-        <div id="m-btn-close" style="position: absolute; top: 25px; right: 25px; color: white; font-family: sans-serif; font-size: 32px; font-weight: bold; cursor: pointer; pointer-events: auto; text-shadow: 0px 2px 5px rgba(0,0,0,0.8);">✕</div>
-        <div id="ar-prompt" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.7); color: white; padding: 15px 25px; border-radius: 30px; font-weight: bold; text-align: center; border: 1px solid var(--neon-cyan); pointer-events: none; text-shadow: 0 2px 4px rgba(0,0,0,0.5); width: 80%; max-width: 300px;">
-                Slowly move your phone to detect the surface.
+        <div id="object-selector" style="
+            position: absolute; 
+            bottom: 100px;
+            left: 20px; 
+            height: 160px;
+            width: 140px;
+            background: rgba(0, 0, 0, 0.65);
+            border-radius: 15px;
+            padding: 10px; 
+            overflow-y: auto;
+            overflow-x: hidden;
+            display: flex; 
+            flex-direction: column; 
+            gap: 10px; 
+            pointer-events: auto;
+            touch-action: pan-y;
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255,255,255,0.1);
+        ">
         </div>
 
-        <div style="position: absolute; bottom: 0; left: 0; width: 100%; background: rgba(0,0,0,0.6); border-top: 1px solid var(--neon-cyan); padding: 15px 10px; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-items: center; backdrop-filter: blur(5px); box-sizing: border-box; pointer-events: auto;">
+        <div class="d-flex justify-content-center align-items-center gap-2" style="position: absolute; bottom: 30px; left: 0; width: 100%; padding: 0 20px; pointer-events: auto;">
             
-            <button id="m-btn-play" style="background: #00aa00; color: white; border: none; padding: 10px 15px; border-radius: 4px; font-weight: bold; cursor: pointer;">PLAY</button>
-            <button id="m-btn-zoom-out" style="background: #0055ff; color: white; border: none; padding: 10px 15px; border-radius: 4px; font-weight: bold; cursor: pointer;">-</button>
-            <button id="m-btn-zoom-in" style="background: #55aaff; color: white; border: none; padding: 10px 15px; border-radius: 4px; font-weight: bold; cursor: pointer;">+</button>
-            
-            <button id="m-btn-rotate" style="background: #8800ff; color: white; border: none; padding: 10px 15px; border-radius: 4px; font-weight: bold; cursor: pointer;">🔄</button>
-            
-            <button id="m-btn-repo" style="background: var(--neon-purple); color: white; border: 1px solid white; padding: 10px 20px; border-radius: 4px; font-weight: bold; cursor: pointer;">📍</button>
-        </div>
+            <button id="m-btn-play" class="btn btn-light rounded-circle shadow-sm" style="width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;">
+                <i class="bi bi-play-fill"></i>
+            </button>
 
+            <div class="btn-group shadow-sm" role="group">
+                <button id="m-btn-zoom-out" class="btn btn-dark border-secondary px-3" style="background: rgba(0,0,0,0.7);">
+                    <i class="bi bi-dash-lg"></i>
+                </button>
+                <button id="m-btn-zoom-in" class="btn btn-dark border-secondary px-3" style="background: rgba(0,0,0,0.7);">
+                    <i class="bi bi-plus-lg"></i>
+                </button>
+            </div>
+
+            <button id="m-btn-rotate" class="btn btn-dark rounded-circle shadow-sm border-secondary" style="width: 50px; height: 50px; background: rgba(0,0,0,0.7);">
+                <i class="bi bi-arrow-repeat"></i>
+            </button>
+
+            <button id="m-btn-delete" class="btn btn-danger rounded-circle shadow-sm" style="width: 50px; height: 50px;">
+                <i class="bi bi-trash"></i>
+            </button>
+
+            <button id="m-btn-repo" class="btn rounded-circle shadow-sm text-white" style="width: 50px; height: 50px; background: var(--neon-purple); border: none;">
+                <i class="bi bi-arrows-move"></i>
+            </button>
+        </div>
     </div>
-    
+
     <div class="interface-box">
-        <div class="tech-accent">// XR_ENVIRONMENT_READY</div>
-        <h1>XR <span>Interface</span></h1>
-        <a href="https://play.google.com/store" class="app-btn">USE NATIVE APP</a>
+        <div class="tech-accent">Powered By XRi</div>
+        
+        <a href="xri://" id="appLink" class="app-btn">USE APP</a>
+        
+        <model-viewer id="ios-fallback-viewer" camera-controls auto-rotate shadow-intensity="1" src=""></model-viewer>
+
+        <div id="webxr-btn-zone" style="width: 100%;"></div>
     </div>
 
     <script type="module" src="./js/app.js"></script>
 
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const params = new URLSearchParams(window.location.search);
+            const modelUrl = params.get('model');
+            const fromValue = params.get('from');
+            const viewer = document.getElementById('ios-fallback-viewer');
+
+            if (fromValue) {
+                const linkElement = document.getElementById('appLink');
+            
+                const newHref = `xri://${encodeURIComponent(fromValue)}`;
+            
+                linkElement.setAttribute('href', newHref);
+            
+            }
+
+            if (modelUrl) {
+                viewer.src = modelUrl;
+
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+                if (isIOS) {
+                    viewer.setAttribute('ar', '');
+                    viewer.setAttribute('ar-modes', 'quick-look');
+                }
+            }
+        });
+    </script>
 </body>
 </html>
